@@ -1,0 +1,9 @@
+{
+  "task_id": "legnext-task-abc123",
+  "status": "succeeded",
+  "images": [
+    {
+      "url": "https://cdn.legnext.com/images/mj-result-abc123.png"
+    }
+  ]
+}
