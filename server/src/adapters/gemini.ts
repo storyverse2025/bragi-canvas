@@ -31,6 +31,28 @@ import { newAssetId, signAssetUrl, storeAsset } from '../assets.js'
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
+/**
+ * Map our internal model IDs to the upstream Google API model names.
+ * Google's Generative Language API returns 404 if the internal names are used directly.
+ * Note: nano-banana-2 is aliased to nano-banana-pro-preview because no separate
+ * upstream variant is currently known; a live smoke test will reveal if one exists.
+ */
+const UPSTREAM_MODEL: Record<string, string> = {
+  // chat
+  'gemini-3-flash':    'gemini-3-flash-preview',
+  'gemini-3.1-pro':    'gemini-3.1-pro-preview',
+  // image (nano-banana)
+  'nano-banana-pro':   'nano-banana-pro-preview',
+  'nano-banana-2':     'nano-banana-pro-preview',   // alias: no separate upstream model yet
+  // video (veo)
+  'veo-3.1':           'veo-3.1-generate-preview',
+  'veo-3.1-lite':      'veo-3.1-lite-generate-preview',
+}
+
+function toUpstream(model: string): string {
+  return UPSTREAM_MODEL[model] ?? model
+}
+
 /** How long callers should wait before polling Veo operations (10 seconds) */
 const VEO_POLL_AFTER_MS = 10_000
 
@@ -142,7 +164,7 @@ export class GeminiAdapter implements Adapter {
       body.generationConfig = { temperature: req.temperature }
     }
 
-    const r: any = await this.call(`/models/${req.model}:generateContent`, body)
+    const r: any = await this.call(`/models/${toUpstream(req.model)}:generateContent`, body)
     const text = r.candidates[0].content.parts[0].text as string
 
     return {
@@ -171,7 +193,7 @@ export class GeminiAdapter implements Adapter {
       },
     }
 
-    const r: any = await this.call(`/models/${req.model}:generateContent`, body)
+    const r: any = await this.call(`/models/${toUpstream(req.model)}:generateContent`, body)
 
     // Gemini image response: candidates[0].content.parts[0].inline_data
     const parts: any[] = r.candidates[0].content.parts
@@ -206,7 +228,7 @@ export class GeminiAdapter implements Adapter {
       },
     }
 
-    const r: any = await this.call(`/models/${req.model}:predictLongRunning`, body)
+    const r: any = await this.call(`/models/${toUpstream(req.model)}:predictLongRunning`, body)
 
     return {
       status: 'queued',

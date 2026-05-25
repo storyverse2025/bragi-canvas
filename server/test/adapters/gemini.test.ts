@@ -32,7 +32,7 @@ afterEach(() => {
 describe('GeminiAdapter', () => {
   it('chatCompletion happy path maps Gemini response correctly', async () => {
     nock(BASE)
-      .post('/v1beta/models/gemini-3-flash:generateContent')
+      .post('/v1beta/models/gemini-3-flash-preview:generateContent')
       .reply(200, chatFx)
 
     const adapter = new GeminiAdapter('test-gemini-key')
@@ -51,7 +51,7 @@ describe('GeminiAdapter', () => {
 
   it('imageGeneration happy path stores base64 and returns signed asset URL', async () => {
     nock(BASE)
-      .post('/v1beta/models/nano-banana-pro:generateContent')
+      .post('/v1beta/models/nano-banana-pro-preview:generateContent')
       .reply(200, imgFx)
 
     const adapter = new GeminiAdapter('test-gemini-key')
@@ -72,7 +72,7 @@ describe('GeminiAdapter', () => {
 
   it('videoGeneration returns AsyncResult with provider_task_id from operation name', async () => {
     nock(BASE)
-      .post('/v1beta/models/veo-3.1:predictLongRunning')
+      .post('/v1beta/models/veo-3.1-generate-preview:predictLongRunning')
       .reply(200, videoFx)
 
     const adapter = new GeminiAdapter('test-gemini-key')
@@ -90,7 +90,7 @@ describe('GeminiAdapter', () => {
 
   it('4xx error maps to provider_invalid_request', async () => {
     nock(BASE)
-      .post('/v1beta/models/gemini-3-flash:generateContent')
+      .post('/v1beta/models/gemini-3-flash-preview:generateContent')
       .reply(400, errorFx)
 
     const adapter = new GeminiAdapter('test-gemini-key')
