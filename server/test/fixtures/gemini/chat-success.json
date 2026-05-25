@@ -1,0 +1,20 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          { "text": "Hello back from Gemini!" }
+        ]
+      },
+      "finishReason": "STOP",
+      "index": 0,
+      "safetyRatings": []
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 5,
+    "candidatesTokenCount": 5,
+    "totalTokenCount": 10
+  }
+}

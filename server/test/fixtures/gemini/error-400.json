@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 400,
+    "message": "Invalid value at 'contents' (type.googleapis.com/google.protobuf.Value), null",
+    "status": "INVALID_ARGUMENT"
+  }
+}
