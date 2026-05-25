@@ -4,7 +4,7 @@ import { GeminiAdapter } from './gemini.js'
 import { ByteplusAdapter } from './byteplus.js'
 import { FalAdapter } from './fal.js'
 import { LumaAdapter } from './luma.js'
-import { XaiAdapter } from './xai.js'
+import { XAIAdapter } from './xai.js'
 import { LegnextAdapter } from './legnext.js'
 import { TokenrouterAdapter } from './tokenrouter.js'
 import { env } from '../env.js'
@@ -39,7 +39,7 @@ function get(p: Provider): Adapter {
       if (E.LUMA_TOKEN ?? env.LUMA_TOKEN) a = new LumaAdapter((E.LUMA_TOKEN ?? env.LUMA_TOKEN)!)
       break
     case 'xai':
-      if (E.XAI_API_KEY ?? env.XAI_API_KEY) a = new XaiAdapter((E.XAI_API_KEY ?? env.XAI_API_KEY)!)
+      if (E.XAI_API_KEY ?? env.XAI_API_KEY) a = new XAIAdapter((E.XAI_API_KEY ?? env.XAI_API_KEY)!)
       break
     case 'legnext':
       if (E.LEGNEXT_API_KEY ?? env.LEGNEXT_API_KEY) a = new LegnextAdapter((E.LEGNEXT_API_KEY ?? env.LEGNEXT_API_KEY)!)
