@@ -1,0 +1,9 @@
+{
+  "video": {
+    "url": "https://fal.media/files/fal/kling-result-abc123.mp4",
+    "content_type": "video/mp4",
+    "file_size": 5242880
+  },
+  "seed": 42,
+  "prompt": "a cinematic sunset over the ocean"
+}

@@ -1,0 +1,8 @@
+{
+  "request_id": "aabbccdd-1234-5678-abcd-ef0123456789",
+  "status": "IN_QUEUE",
+  "queue_position": 1,
+  "response_url": "https://queue.fal.run/fal-ai/grok-video/requests/aabbccdd-1234-5678-abcd-ef0123456789",
+  "status_url": "https://queue.fal.run/fal-ai/grok-video/requests/aabbccdd-1234-5678-abcd-ef0123456789/status",
+  "cancel_url": "https://queue.fal.run/fal-ai/grok-video/requests/aabbccdd-1234-5678-abcd-ef0123456789/cancel"
+}

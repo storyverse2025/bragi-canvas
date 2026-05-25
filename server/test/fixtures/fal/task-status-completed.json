@@ -1,0 +1,9 @@
+{
+  "status": "COMPLETED",
+  "request_id": "764cabcf-b745-4b3e-ae38-1200304cf45b",
+  "response_url": "https://queue.fal.run/fal-ai/kling-video/v3/text-to-video/requests/764cabcf-b745-4b3e-ae38-1200304cf45b",
+  "logs": [],
+  "metrics": { "inference_time": 12.5 },
+  "error": null,
+  "error_type": null
+}
