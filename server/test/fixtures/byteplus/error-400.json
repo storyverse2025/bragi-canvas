@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "InvalidParameter",
+    "message": "Invalid model name or prompt.",
+    "type": "invalid_request_error"
+  }
+}

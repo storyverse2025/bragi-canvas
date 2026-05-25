@@ -1,0 +1,14 @@
+{
+  "model": "seedream-3-0-t2i-250415",
+  "data": [
+    {
+      "url": "https://ark-sg.byteplus.com/bytepluses-img/seedream-result-abc123.png",
+      "b64_json": null
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 20,
+    "completion_tokens": 0,
+    "total_tokens": 20
+  }
+}
