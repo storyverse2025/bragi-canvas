@@ -1,8 +1,27 @@
-import { Hono } from 'hono'
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
+import { z } from 'zod'
 
-export const authRoute = new Hono()
+export const authRoute = new OpenAPIHono()
 
-authRoute.post('/check', c => {
+const authCheckRoute = createRoute({
+  method: 'post',
+  path: '/check',
+  tags: ['auth'],
+  summary: 'Verify bearer token',
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: 'Token is valid',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    401: {
+      description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+  },
+})
+
+authRoute.openapi(authCheckRoute, c => {
   const token = c.get('bragiToken') as string
   return c.json({ ok: true, label: token })
 })

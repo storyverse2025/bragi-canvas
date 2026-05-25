@@ -1,19 +1,50 @@
-import { Hono } from 'hono'
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
+import { z } from 'zod'
 import { ChatCompletionsBody } from '../schemas/chat-completions.js'
 import { lookupModel } from '../registry.js'
 import { adapterFor } from '../adapters/index.js'
 import { ApiError, toErrorResponse } from '../errors.js'
 
-export const chatRoute = new Hono()
+export const chatRoute = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) {
+      const { status, body } = toErrorResponse(new ApiError('invalid_request', result.error.message, 400))
+      return c.json(body, status)
+    }
+  },
+})
 
-chatRoute.post('/chat/completions', async c => {
-  const raw = await c.req.json().catch(() => null)
-  const parsed = ChatCompletionsBody.safeParse(raw)
-  if (!parsed.success) {
-    const { status, body } = toErrorResponse(new ApiError('invalid_request', parsed.error.message, 400))
-    return c.json(body, status)
-  }
-  const req = parsed.data
+const chatCompletionsRoute = createRoute({
+  method: 'post',
+  path: '/chat/completions',
+  tags: ['chat'],
+  summary: 'Generate a chat completion (OpenAI-compatible)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: ChatCompletionsBody } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'OpenAI ChatCompletion',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    400: {
+      description: 'Validation or unknown model error',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    401: {
+      description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+  },
+})
+
+chatRoute.openapi(chatCompletionsRoute, async c => {
+  // Re-parse for type safety (openapi already validated, but req.json() for handler convenience)
+  const req = c.req.valid('json')
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'text') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for chat`, 400))

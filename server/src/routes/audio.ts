@@ -1,4 +1,5 @@
-import { Hono } from 'hono'
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
+import { z } from 'zod'
 import { AudioSpeechBody } from '../schemas/audio-speech.js'
 import { AudioMusicBody } from '../schemas/audio-music.js'
 import { AudioSfxBody } from '../schemas/audio-sfx.js'
@@ -6,16 +7,105 @@ import { lookupModel } from '../registry.js'
 import { adapterFor } from '../adapters/index.js'
 import { ApiError, toErrorResponse } from '../errors.js'
 
-export const audioRoute = new Hono()
+export const audioRoute = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) {
+      const { status, body } = toErrorResponse(new ApiError('invalid_request', result.error.message, 400))
+      return c.json(body, status)
+    }
+  },
+})
 
-audioRoute.post('/audio/speech', async c => {
-  const raw = await c.req.json().catch(() => null)
-  const parsed = AudioSpeechBody.safeParse(raw)
-  if (!parsed.success) {
-    const { status, body } = toErrorResponse(new ApiError('invalid_request', parsed.error.message, 400))
-    return c.json(body, status)
-  }
-  const req = parsed.data
+const audioSpeechRoute = createRoute({
+  method: 'post',
+  path: '/audio/speech',
+  tags: ['audio'],
+  summary: 'Text-to-speech synthesis',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: AudioSpeechBody } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'Audio binary or task queued',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    202: {
+      description: 'Speech generation queued (async)',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    400: {
+      description: 'Validation or unknown model error',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    401: {
+      description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+  },
+})
+
+const audioMusicRoute = createRoute({
+  method: 'post',
+  path: '/audio/music',
+  tags: ['audio'],
+  summary: 'Music generation (async)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: AudioMusicBody } },
+      required: true,
+    },
+  },
+  responses: {
+    202: {
+      description: 'Music generation queued',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    400: {
+      description: 'Validation or unknown model error',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    401: {
+      description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+  },
+})
+
+const audioSfxRoute = createRoute({
+  method: 'post',
+  path: '/audio/sfx',
+  tags: ['audio'],
+  summary: 'Sound effects generation (async)',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: AudioSfxBody } },
+      required: true,
+    },
+  },
+  responses: {
+    202: {
+      description: 'SFX generation queued',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    400: {
+      description: 'Validation or unknown model error',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    401: {
+      description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+  },
+})
+
+audioRoute.openapi(audioSpeechRoute, async c => {
+  const req = c.req.valid('json')
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'audio') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for audio`, 400))
@@ -36,14 +126,8 @@ audioRoute.post('/audio/speech', async c => {
   }
 })
 
-audioRoute.post('/audio/music', async c => {
-  const raw = await c.req.json().catch(() => null)
-  const parsed = AudioMusicBody.safeParse(raw)
-  if (!parsed.success) {
-    const { status, body } = toErrorResponse(new ApiError('invalid_request', parsed.error.message, 400))
-    return c.json(body, status)
-  }
-  const req = parsed.data
+audioRoute.openapi(audioMusicRoute, async c => {
+  const req = c.req.valid('json')
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'audio') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for audio`, 400))
@@ -60,14 +144,8 @@ audioRoute.post('/audio/music', async c => {
   }
 })
 
-audioRoute.post('/audio/sfx', async c => {
-  const raw = await c.req.json().catch(() => null)
-  const parsed = AudioSfxBody.safeParse(raw)
-  if (!parsed.success) {
-    const { status, body } = toErrorResponse(new ApiError('invalid_request', parsed.error.message, 400))
-    return c.json(body, status)
-  }
-  const req = parsed.data
+audioRoute.openapi(audioSfxRoute, async c => {
+  const req = c.req.valid('json')
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'audio') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for audio`, 400))

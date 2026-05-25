@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { OpenAPIHono } from '@hono/zod-openapi'
 import { healthRoute } from '../src/routes/health.js'
 import { authRoute } from '../src/routes/auth.js'
 import { uploadsRoute } from '../src/routes/uploads.js'
@@ -12,8 +12,8 @@ import { requireBragiToken } from '../src/auth.js'
 
 const TEST_TOKENS = new Set(['svsk-test-1', 'svsk-test-2'])
 
-export function buildApp(): Hono {
-  const app = new Hono()
+export function buildApp(): OpenAPIHono {
+  const app = new OpenAPIHono()
   app.route('/v1', healthRoute)
   app.route('/v1', assetsRoute)                          // BEFORE auth — sig is the auth
   app.use('/v1/auth/*', requireBragiToken(TEST_TOKENS))

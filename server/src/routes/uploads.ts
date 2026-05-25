@@ -1,11 +1,46 @@
-import { Hono } from 'hono'
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
+import { z } from 'zod'
 import { newAssetId, signAssetUrl, storeAsset } from '../assets.js'
 import { env } from '../env.js'
 import { ApiError, toErrorResponse } from '../errors.js'
 
-export const uploadsRoute = new Hono()
+export const uploadsRoute = new OpenAPIHono()
 
-uploadsRoute.post('/uploads', async c => {
+const uploadsPostRoute = createRoute({
+  method: 'post',
+  path: '/uploads',
+  tags: ['uploads'],
+  summary: 'Upload a file asset',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        'multipart/form-data': {
+          schema: z.object({
+            file: z.instanceof(File).openapi({ type: 'string', format: 'binary' }),
+          }),
+        },
+      },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'Asset uploaded successfully',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    400: {
+      description: 'Missing or invalid file field',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    401: {
+      description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+  },
+})
+
+uploadsRoute.openapi(uploadsPostRoute, async c => {
   const form = await c.req.parseBody()
   const file = form['file']
   if (!(file instanceof File)) {

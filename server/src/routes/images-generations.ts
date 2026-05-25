@@ -1,19 +1,53 @@
-import { Hono } from 'hono'
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
+import { z } from 'zod'
 import { ImagesGenerationsBody } from '../schemas/images-generations.js'
 import { lookupModel } from '../registry.js'
 import { adapterFor } from '../adapters/index.js'
 import { ApiError, toErrorResponse } from '../errors.js'
 
-export const imagesRoute = new Hono()
+export const imagesRoute = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) {
+      const { status, body } = toErrorResponse(new ApiError('invalid_request', result.error.message, 400))
+      return c.json(body, status)
+    }
+  },
+})
 
-imagesRoute.post('/images/generations', async c => {
-  const raw = await c.req.json().catch(() => null)
-  const parsed = ImagesGenerationsBody.safeParse(raw)
-  if (!parsed.success) {
-    const { status, body } = toErrorResponse(new ApiError('invalid_request', parsed.error.message, 400))
-    return c.json(body, status)
-  }
-  const req = parsed.data
+const imagesGenerationsRoute = createRoute({
+  method: 'post',
+  path: '/images/generations',
+  tags: ['images'],
+  summary: 'Generate images',
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: { 'application/json': { schema: ImagesGenerationsBody } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      description: 'Image generation result',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    202: {
+      description: 'Image generation queued (async)',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    400: {
+      description: 'Validation or unknown model error',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    401: {
+      description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+  },
+})
+
+imagesRoute.openapi(imagesGenerationsRoute, async c => {
+  const req = c.req.valid('json')
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'image') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for image`, 400))
