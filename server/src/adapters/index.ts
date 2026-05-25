@@ -7,7 +7,6 @@ import { LumaAdapter } from './luma.js'
 import { XAIAdapter } from './xai.js'
 import { LegnextAdapter } from './legnext.js'
 import { TokenrouterAdapter } from './tokenrouter.js'
-import { env } from '../env.js'
 import type { Provider } from '../registry.js'
 import { ApiError } from '../errors.js'
 
@@ -19,33 +18,33 @@ function get(p: Provider): Adapter {
   const E = process.env  // read env at request time for testability
   switch (p) {
     case 'openai':
-      if (E.OPENAI_API_KEY ?? env.OPENAI_API_KEY) a = new OpenAIAdapter((E.OPENAI_API_KEY ?? env.OPENAI_API_KEY)!)
+      if (E.OPENAI_API_KEY) a = new OpenAIAdapter(E.OPENAI_API_KEY)
       break
     case 'gemini':
-      if (E.GEMINI_API_KEY ?? env.GEMINI_API_KEY) a = new GeminiAdapter((E.GEMINI_API_KEY ?? env.GEMINI_API_KEY)!)
+      if (E.GEMINI_API_KEY) a = new GeminiAdapter(E.GEMINI_API_KEY)
       break
     case 'byteplus': {
-      const k = E.BYTEPLUS_API_KEY ?? env.BYTEPLUS_API_KEY
-      const ak = E.BYTEPLUS_ACCESS_KEY ?? env.BYTEPLUS_ACCESS_KEY
-      const sk = E.BYTEPLUS_SECRET_KEY ?? env.BYTEPLUS_SECRET_KEY
-      const project = E.BYTEPLUS_PROJECT ?? env.BYTEPLUS_PROJECT
+      const k = E.BYTEPLUS_API_KEY
+      const ak = E.BYTEPLUS_ACCESS_KEY
+      const sk = E.BYTEPLUS_SECRET_KEY
+      const project = E.BYTEPLUS_PROJECT
       if (k && ak && sk && project) a = new ByteplusAdapter({ apiKey: k, accessKey: ak, secretKey: sk, project })
       break
     }
     case 'fal':
-      if (E.FAL_API_KEY ?? env.FAL_API_KEY) a = new FalAdapter((E.FAL_API_KEY ?? env.FAL_API_KEY)!)
+      if (E.FAL_API_KEY) a = new FalAdapter(E.FAL_API_KEY)
       break
     case 'luma':
-      if (E.LUMA_TOKEN ?? env.LUMA_TOKEN) a = new LumaAdapter((E.LUMA_TOKEN ?? env.LUMA_TOKEN)!)
+      if (E.LUMA_TOKEN) a = new LumaAdapter(E.LUMA_TOKEN)
       break
     case 'xai':
-      if (E.XAI_API_KEY ?? env.XAI_API_KEY) a = new XAIAdapter((E.XAI_API_KEY ?? env.XAI_API_KEY)!)
+      if (E.XAI_API_KEY) a = new XAIAdapter(E.XAI_API_KEY)
       break
     case 'legnext':
-      if (E.LEGNEXT_API_KEY ?? env.LEGNEXT_API_KEY) a = new LegnextAdapter((E.LEGNEXT_API_KEY ?? env.LEGNEXT_API_KEY)!)
+      if (E.LEGNEXT_API_KEY) a = new LegnextAdapter(E.LEGNEXT_API_KEY)
       break
     case 'tokenrouter':
-      if (E.TOKENROUTER_API_KEY ?? env.TOKENROUTER_API_KEY) a = new TokenrouterAdapter((E.TOKENROUTER_API_KEY ?? env.TOKENROUTER_API_KEY)!)
+      if (E.TOKENROUTER_API_KEY) a = new TokenrouterAdapter(E.TOKENROUTER_API_KEY)
       break
   }
   if (!a) throw new ApiError('provider_unavailable', `provider ${p} not configured (missing key)`, 503)
