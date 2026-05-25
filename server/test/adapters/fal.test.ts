@@ -80,9 +80,11 @@ describe('FalAdapter', () => {
     const modelPath = 'fal-ai/kling-video/v3/text-to-video'
     const requestId = '764cabcf-b745-4b3e-ae38-1200304cf45b'
     const taskId = `${modelPath}|${requestId}`
+    // fal status URLs use only the first two path segments (org/model), no version suffix
+    const statusBase = 'fal-ai/kling-video'
 
     nock(BASE)
-      .get(`/${modelPath}/requests/${requestId}/status`)
+      .get(`/${statusBase}/requests/${requestId}/status`)
       .reply(200, taskInQueueFx)
 
     const adapter = new FalAdapter('fal-test-key')
@@ -96,13 +98,15 @@ describe('FalAdapter', () => {
     const modelPath = 'fal-ai/kling-video/v3/text-to-video'
     const requestId = '764cabcf-b745-4b3e-ae38-1200304cf45b'
     const taskId = `${modelPath}|${requestId}`
+    // fal status URLs use only the first two path segments (org/model), no version suffix
+    const statusBase = 'fal-ai/kling-video'
 
     nock(BASE)
-      .get(`/${modelPath}/requests/${requestId}/status`)
+      .get(`/${statusBase}/requests/${requestId}/status`)
       .reply(200, taskCompletedFx)
 
     nock(BASE)
-      .get(`/${modelPath}/requests/${requestId}`)
+      .get(`/${statusBase}/requests/${requestId}`)
       .reply(200, videoResultFx)
 
     const adapter = new FalAdapter('fal-test-key')

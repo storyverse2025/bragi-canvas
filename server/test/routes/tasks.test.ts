@@ -13,8 +13,10 @@ describe('GET /v1/tasks/:provider/:task_id', () => {
     const modelPath = 'fal-ai/kling-video/v3/text-to-video'
     const requestId = 'req-abc-123'
     const taskId = `${modelPath}|${requestId}`
+    // fal status URLs use only the first two path segments (org/model), no version suffix
+    const statusBase = 'fal-ai/kling-video'
     nock('https://queue.fal.run')
-      .get(`/${modelPath}/requests/${requestId}/status`)
+      .get(`/${statusBase}/requests/${requestId}/status`)
       .reply(200, { status: 'IN_QUEUE' })
     const res = await buildApp().request(`/v1/tasks/fal/${encodeURIComponent(taskId)}`, {
       method: 'GET',

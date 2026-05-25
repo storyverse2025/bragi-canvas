@@ -254,8 +254,14 @@ export class FalAdapter implements Adapter {
     const modelPath = taskId.slice(0, pipeIdx)
     const requestId = taskId.slice(pipeIdx + 1)
 
+    // fal status/result URLs use only the first two path segments (org/model-name),
+    // dropping any version-and-mode suffix (e.g. /v3/text-to-video).
+    // Wrong: /fal-ai/kling-video/v3/text-to-video/requests/{id}/status
+    // Right: /fal-ai/kling-video/requests/{id}/status
+    const statusBase = modelPath.split('/').slice(0, 2).join('/')
+
     // Poll status endpoint
-    const statusResp: any = await this.call('GET', `/${modelPath}/requests/${requestId}/status`, null)
+    const statusResp: any = await this.call('GET', `/${statusBase}/requests/${requestId}/status`, null)
     const status: string = statusResp.status
 
     if (status === 'FAILED') {
@@ -279,8 +285,8 @@ export class FalAdapter implements Adapter {
     }
 
     if (status === 'COMPLETED') {
-      // Fetch the actual result
-      const result: any = await this.call('GET', `/${modelPath}/requests/${requestId}`, null)
+      // Fetch the actual result — same short base path, no version suffix
+      const result: any = await this.call('GET', `/${statusBase}/requests/${requestId}`, null)
 
       // Determine output kind and URL from result shape
       // ASSUMPTION: video models return { video: { url, content_type } }
