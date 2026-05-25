@@ -4,7 +4,7 @@ import chatFx from '../fixtures/tokenrouter/chat-success.json' with { type: 'jso
 import errorFx from '../fixtures/tokenrouter/error-400.json' with { type: 'json' }
 import { TokenrouterAdapter } from '../../src/adapters/tokenrouter.js'
 
-const BASE = 'https://api.tokenrouter.ai'
+const BASE = 'https://api.tokenrouter.com'
 
 afterEach(() => {
   nock.cleanAll()

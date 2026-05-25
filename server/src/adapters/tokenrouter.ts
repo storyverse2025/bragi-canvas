@@ -5,10 +5,10 @@
  * LLM models including Qwen.
  *
  * Supported models:
- *   Chat (sync): qwen-3-6-plus → upstream "qwen3-72b"
+ *   Chat (sync): qwen-3-6-plus → upstream "qwen/qwen3.6-plus"
  *
  * Auth: Authorization: Bearer ${TOKENROUTER_API_KEY}
- * Base: https://api.tokenrouter.ai/v1
+ * Base: https://api.tokenrouter.com/v1
  *
  * CONCERNS / ASSUMPTIONS (verify during live smoke Task 31):
  *   1. BASE URL: "https://api.tokenrouter.ai/v1" — best guess. Confirm from vendor portal.
@@ -26,14 +26,14 @@ import type { Adapter, SyncResult } from './types.js'
 import { ApiError } from '../errors.js'
 import type { ChatCompletionsRequest } from '../schemas/chat-completions.js'
 
-const BASE = 'https://api.tokenrouter.ai/v1'
+const BASE = 'https://api.tokenrouter.com/v1'
 
 /**
  * Map our model IDs to Tokenrouter upstream model names.
  * ASSUMPTION: Verify exact upstream model names via vendor portal or API docs.
  */
 const MODEL_MAP: Record<string, string> = {
-  'qwen-3-6-plus': 'qwen3-72b',
+  'qwen-3-6-plus': 'qwen/qwen3.6-plus',
 }
 
 export class TokenrouterAdapter implements Adapter {
