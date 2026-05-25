@@ -2,7 +2,7 @@
  * xAI Adapter (Grok models)
  *
  * Supported models:
- *   Image (sync):  grok-imagine → upstream "grok-2-image-1212"
+ *   Image (sync):  grok-imagine → upstream "grok-imagine-image"
  *   Audio TTS:     grok-tts    → upstream "grok-2-tts-1" (returns binary audio bytes)
  *
  * Auth: Authorization: Bearer ${XAI_API_KEY}
@@ -31,7 +31,7 @@ const BASE = 'https://api.x.ai/v1'
 
 /** Map our image model IDs to xAI upstream model names */
 const IMAGE_MODEL_MAP: Record<string, string> = {
-  'grok-imagine': 'grok-2-image-1212',
+  'grok-imagine': 'grok-imagine-image',
 }
 
 /** Map our TTS model IDs to xAI upstream model names */
