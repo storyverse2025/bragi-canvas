@@ -33,7 +33,7 @@
  */
 
 import type { Adapter, AsyncResult, TaskStatusResult } from './types.js'
-import { ApiError } from '../errors.js'
+import { ApiError, toHttpStatus } from '../errors.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 
 const BASE = 'https://api.legnext.com/v1'
@@ -86,7 +86,7 @@ export class LegnextAdapter implements Adapter {
       throw new ApiError(
         code,
         typeof message === 'string' ? message : JSON.stringify(message),
-        res.status === 429 ? 503 : res.status,
+        toHttpStatus(res.status),
         parsed,
       )
     }

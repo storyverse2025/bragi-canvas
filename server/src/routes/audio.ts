@@ -109,19 +109,25 @@ audioRoute.openapi(audioSpeechRoute, async c => {
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'audio') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for audio`, 400))
-    return c.json(body, status)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return c.json(body, status) as any
   }
   try {
     const a = adapterFor(entry.provider)
     if (!a.audioSpeech) throw new ApiError('internal_error', `adapter missing audioSpeech`, 500)
     const r = await a.audioSpeech(req)
     if ('bytes' in r) {
-      return new Response(new Uint8Array(r.bytes), { headers: { 'Content-Type': r.mimeType } })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return new Response(new Uint8Array(r.bytes), { headers: { 'Content-Type': r.mimeType } }) as any
     }
     // AsyncResult
     return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
   } catch (e) {
-    if (e instanceof ApiError) { const { status, body } = toErrorResponse(e); return c.json(body, status) }
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
     throw e
   }
 })
@@ -131,7 +137,8 @@ audioRoute.openapi(audioMusicRoute, async c => {
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'audio') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for audio`, 400))
-    return c.json(body, status)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return c.json(body, status) as any
   }
   try {
     const a = adapterFor(entry.provider)
@@ -139,7 +146,11 @@ audioRoute.openapi(audioMusicRoute, async c => {
     const r = await a.audioMusic(req)
     return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
   } catch (e) {
-    if (e instanceof ApiError) { const { status, body } = toErrorResponse(e); return c.json(body, status) }
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
     throw e
   }
 })
@@ -149,7 +160,8 @@ audioRoute.openapi(audioSfxRoute, async c => {
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'audio') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for audio`, 400))
-    return c.json(body, status)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return c.json(body, status) as any
   }
   try {
     const a = adapterFor(entry.provider)
@@ -157,7 +169,11 @@ audioRoute.openapi(audioSfxRoute, async c => {
     const r = await a.audioSfx(req)
     return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
   } catch (e) {
-    if (e instanceof ApiError) { const { status, body } = toErrorResponse(e); return c.json(body, status) }
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
     throw e
   }
 })

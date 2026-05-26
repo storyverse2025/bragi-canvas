@@ -14,7 +14,7 @@
  */
 
 import type { Adapter, AsyncResult, TaskStatusResult } from './types.js'
-import { ApiError } from '../errors.js'
+import { ApiError, toHttpStatus } from '../errors.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 
 const APIMART_POLL_AFTER_MS = 5_000
@@ -58,7 +58,7 @@ export class ApimartAdapter implements Adapter {
       const code = res.status >= 500 ? 'provider_unavailable' : 'provider_invalid_request'
       const err = parsed?.error ?? {}
       const message = err.message ?? `Apimart ${res.status}`
-      throw new ApiError(code, typeof message === 'string' ? message : JSON.stringify(message), res.status === 429 ? 503 : res.status, parsed)
+      throw new ApiError(code, typeof message === 'string' ? message : JSON.stringify(message), toHttpStatus(res.status), parsed)
     }
     return parsed
   }

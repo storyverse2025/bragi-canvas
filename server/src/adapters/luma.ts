@@ -15,7 +15,7 @@
  */
 
 import type { Adapter, SyncResult, AsyncResult, TaskStatusResult } from './types.js'
-import { ApiError } from '../errors.js'
+import { ApiError, toHttpStatus } from '../errors.js'
 import type { VideosGenerationsRequest } from '../schemas/videos-generations.js'
 import { materializeAsset } from './materialize-asset.js'
 
@@ -73,7 +73,7 @@ export class LumaAdapter implements Adapter {
     if (!res.ok) {
       const code = res.status >= 500 ? 'provider_unavailable' : 'provider_invalid_request'
       const message = parsed?.detail ?? parsed?.error?.message ?? parsed?.message ?? `Luma ${res.status}`
-      throw new ApiError(code, typeof message === 'string' ? message : JSON.stringify(message), res.status === 429 ? 503 : res.status, parsed)
+      throw new ApiError(code, typeof message === 'string' ? message : JSON.stringify(message), toHttpStatus(res.status), parsed)
     }
     return parsed
   }
@@ -96,7 +96,7 @@ export class LumaAdapter implements Adapter {
     if (!res.ok) {
       const code = res.status >= 500 ? 'provider_unavailable' : 'provider_invalid_request'
       const message = parsed?.detail ?? parsed?.error?.message ?? parsed?.message ?? `Luma ${res.status}`
-      throw new ApiError(code, typeof message === 'string' ? message : JSON.stringify(message), res.status === 429 ? 503 : res.status, parsed)
+      throw new ApiError(code, typeof message === 'string' ? message : JSON.stringify(message), toHttpStatus(res.status), parsed)
     }
     return parsed
   }

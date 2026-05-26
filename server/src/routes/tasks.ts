@@ -43,7 +43,8 @@ tasksRoute.openapi(tasksGetRoute, async c => {
   const taskId = c.req.param('task_id')
   if (!VALID_PROVIDERS.has(provider)) {
     const { status, body } = toErrorResponse(new ApiError('invalid_request', `unknown provider ${provider}`, 400))
-    return c.json(body, status)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return c.json(body, status) as any
   }
   try {
     const a = adapterFor(provider)
@@ -51,7 +52,11 @@ tasksRoute.openapi(tasksGetRoute, async c => {
     const r = await a.taskStatus(taskId)
     return c.json(r)
   } catch (e) {
-    if (e instanceof ApiError) { const { status, body } = toErrorResponse(e); return c.json(body, status) }
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
     throw e
   }
 })

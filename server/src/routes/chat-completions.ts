@@ -48,7 +48,8 @@ chatRoute.openapi(chatCompletionsRoute, async c => {
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'text') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for chat`, 400))
-    return c.json(body, status)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return c.json(body, status) as any
   }
   try {
     const a = adapterFor(entry.provider)
@@ -64,7 +65,8 @@ chatRoute.openapi(chatCompletionsRoute, async c => {
   } catch (e) {
     if (e instanceof ApiError) {
       const { status, body } = toErrorResponse(e)
-      return c.json(body, status)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
     }
     throw e
   }

@@ -30,7 +30,7 @@
  */
 
 import type { Adapter, AsyncResult, TaskStatusResult } from './types.js'
-import { ApiError } from '../errors.js'
+import { ApiError, toHttpStatus } from '../errors.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 import type { VideosGenerationsRequest } from '../schemas/videos-generations.js'
 import type { AudioMusicRequest } from '../schemas/audio-music.js'
@@ -131,7 +131,7 @@ export class FalAdapter implements Adapter {
       throw new ApiError(
         code,
         typeof message === 'string' ? message : JSON.stringify(message),
-        res.status === 429 ? 503 : res.status,
+        toHttpStatus(res.status),
         parsed,
       )
     }

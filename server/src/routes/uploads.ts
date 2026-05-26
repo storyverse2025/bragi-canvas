@@ -45,7 +45,8 @@ uploadsRoute.openapi(uploadsPostRoute, async c => {
   const file = form['file']
   if (!(file instanceof File)) {
     const { status, body } = toErrorResponse(new ApiError('invalid_request', 'file field required', 400))
-    return c.json(body, status)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return c.json(body, status) as any
   }
   const buf = Buffer.from(await file.arrayBuffer())
   const id = newAssetId()

@@ -23,7 +23,7 @@
  */
 
 import type { Adapter, SyncResult } from './types.js'
-import { ApiError } from '../errors.js'
+import { ApiError, toHttpStatus } from '../errors.js'
 import type { ChatCompletionsRequest } from '../schemas/chat-completions.js'
 
 const BASE = 'https://api.tokenrouter.com/v1'
@@ -80,7 +80,7 @@ export class TokenrouterAdapter implements Adapter {
       throw new ApiError(
         code,
         parsed?.error?.message ?? `Tokenrouter ${res.status}`,
-        res.status === 429 ? 503 : res.status,
+        toHttpStatus(res.status),
         parsed,
       )
     }

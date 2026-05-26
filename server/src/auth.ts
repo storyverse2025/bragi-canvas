@@ -10,7 +10,8 @@ export function requireBragiToken(allowlist: ReadonlySet<string>): MiddlewareHan
       const { status, body } = toErrorResponse(new ApiError('invalid_token', 'Token not recognized', 401))
       return c.json(body, status)
     }
-    c.set('bragiToken', token)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(c as any).set('bragiToken', token)
     await next()
   }
 }

@@ -23,7 +23,7 @@
  */
 
 import type { Adapter, SyncResult, AsyncResult, TaskStatusResult } from './types.js'
-import { ApiError } from '../errors.js'
+import { ApiError, toHttpStatus } from '../errors.js'
 import type { ChatCompletionsRequest } from '../schemas/chat-completions.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 import type { VideosGenerationsRequest } from '../schemas/videos-generations.js'
@@ -85,7 +85,7 @@ export class GeminiAdapter implements Adapter {
       throw new ApiError(
         code,
         parsed?.error?.message ?? `Gemini ${res.status}`,
-        res.status === 429 ? 503 : res.status,
+        toHttpStatus(res.status),
         parsed,
       )
     }
@@ -106,7 +106,7 @@ export class GeminiAdapter implements Adapter {
       throw new ApiError(
         code,
         parsed?.error?.message ?? `Gemini poll ${res.status}`,
-        res.status === 429 ? 503 : res.status,
+        toHttpStatus(res.status),
         parsed,
       )
     }

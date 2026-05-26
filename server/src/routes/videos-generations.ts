@@ -47,7 +47,8 @@ videosRoute.openapi(videosGenerationsRoute, async c => {
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'video') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for video`, 400))
-    return c.json(body, status)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return c.json(body, status) as any
   }
   try {
     const a = adapterFor(entry.provider)
@@ -55,7 +56,11 @@ videosRoute.openapi(videosGenerationsRoute, async c => {
     const r = await a.videoGeneration(req)
     return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
   } catch (e) {
-    if (e instanceof ApiError) { const { status, body } = toErrorResponse(e); return c.json(body, status) }
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
     throw e
   }
 })

@@ -23,7 +23,7 @@
  */
 
 import type { Adapter, SyncResult } from './types.js'
-import { ApiError } from '../errors.js'
+import { ApiError, toHttpStatus } from '../errors.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 import type { AudioSpeechRequest } from '../schemas/audio-speech.js'
 
@@ -73,7 +73,7 @@ export class XAIAdapter implements Adapter {
       throw new ApiError(
         code,
         parsed?.error?.message ?? `xAI ${res.status}`,
-        res.status === 429 ? 503 : res.status,
+        toHttpStatus(res.status),
         parsed,
       )
     }
@@ -102,7 +102,7 @@ export class XAIAdapter implements Adapter {
       throw new ApiError(
         code,
         parsed?.error?.message ?? `xAI ${res.status}`,
-        res.status === 429 ? 503 : res.status,
+        toHttpStatus(res.status),
         parsed,
       )
     }

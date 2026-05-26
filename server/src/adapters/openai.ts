@@ -1,5 +1,5 @@
 import type { Adapter, SyncResult } from './types.js'
-import { ApiError } from '../errors.js'
+import { ApiError, toHttpStatus } from '../errors.js'
 import type { ChatCompletionsRequest } from '../schemas/chat-completions.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 
@@ -23,7 +23,7 @@ export class OpenAIAdapter implements Adapter {
     try { parsed = JSON.parse(text) } catch { parsed = text }
     if (!res.ok) {
       const code = res.status >= 500 ? 'provider_unavailable' : 'provider_invalid_request'
-      throw new ApiError(code, parsed?.error?.message ?? `OpenAI ${res.status}`, res.status === 429 ? 503 : res.status, parsed)
+      throw new ApiError(code, parsed?.error?.message ?? `OpenAI ${res.status}`, toHttpStatus(res.status), parsed)
     }
     return parsed
   }

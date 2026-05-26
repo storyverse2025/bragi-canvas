@@ -51,7 +51,8 @@ imagesRoute.openapi(imagesGenerationsRoute, async c => {
   const entry = lookupModel(req.model)
   if (!entry || entry.capability !== 'image') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for image`, 400))
-    return c.json(body, status)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return c.json(body, status) as any
   }
   try {
     const a = adapterFor(entry.provider)
@@ -65,7 +66,11 @@ imagesRoute.openapi(imagesGenerationsRoute, async c => {
       data: r.outputs.map(o => ({ url: o.url })),
     })
   } catch (e) {
-    if (e instanceof ApiError) { const { status, body } = toErrorResponse(e); return c.json(body, status) }
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
     throw e
   }
 })
