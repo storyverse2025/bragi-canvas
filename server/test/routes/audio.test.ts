@@ -1,10 +1,20 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import nock from 'nock'
+import { OpenAPIHono } from '@hono/zod-openapi'
 import { buildApp } from '../helpers.js'
 import { resetAdapterCache } from '../../src/adapters/index.js'
 
 beforeEach(() => { resetAdapterCache() })
 afterEach(() => nock.cleanAll())
+
+function buildDocApp() {
+  const app = buildApp() as OpenAPIHono
+  app.doc('/v1/openapi.json', {
+    openapi: '3.0.0',
+    info: { title: 'Storyverse Router', version: '0.1.0' },
+  })
+  return app
+}
 
 describe('POST /v1/audio/speech', () => {
   it('routes to xai adapter and returns audio bytes', async () => {
@@ -47,5 +57,18 @@ describe('POST /v1/audio/speech', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.error.code).toBe('invalid_request')
+  })
+
+  it('declares 200 response as audio/* in openapi doc', async () => {
+    const app = buildDocApp()
+    const res = await app.request('/v1/openapi.json')
+    expect(res.status).toBe(200)
+    const doc = await res.json() as any
+    const audioSpeech200 = doc.paths['/v1/audio/speech']?.post?.responses?.['200']
+    expect(audioSpeech200?.content?.['audio/mpeg']).toBeDefined()
+    expect(audioSpeech200?.content?.['audio/wav']).toBeDefined()
+    expect(audioSpeech200?.content?.['audio/opus']).toBeDefined()
+    // 200 should not have application/json content (audio is bytes)
+    expect(audioSpeech200?.content?.['application/json']).toBeUndefined()
   })
 })

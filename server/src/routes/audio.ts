@@ -1,5 +1,6 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
 import { z } from 'zod'
+import type { ZodSchema } from 'zod'
 import { AudioSpeechBody } from '../schemas/audio-speech.js'
 import { AudioMusicBody } from '../schemas/audio-music.js'
 import { AudioSfxBody } from '../schemas/audio-sfx.js'
@@ -30,8 +31,14 @@ const audioSpeechRoute = createRoute({
   },
   responses: {
     200: {
-      description: 'Audio binary or task queued',
-      content: { 'application/json': { schema: z.any() } },
+      description: 'Generated audio bytes',
+      content: {
+        'audio/mpeg': { schema: { type: 'string', format: 'binary' } as unknown as ZodSchema },
+        'audio/wav': { schema: { type: 'string', format: 'binary' } as unknown as ZodSchema },
+        'audio/opus': { schema: { type: 'string', format: 'binary' } as unknown as ZodSchema },
+        'audio/aac': { schema: { type: 'string', format: 'binary' } as unknown as ZodSchema },
+        'audio/flac': { schema: { type: 'string', format: 'binary' } as unknown as ZodSchema },
+      },
     },
     202: {
       description: 'Speech generation queued (async)',
@@ -43,6 +50,10 @@ const audioSpeechRoute = createRoute({
     },
     401: {
       description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    503: {
+      description: 'Provider unavailable',
       content: { 'application/json': { schema: z.any() } },
     },
   },
