@@ -31,7 +31,7 @@ const BASE = 'https://api.x.ai/v1'
 
 /** Map our image model IDs to xAI upstream model names */
 const IMAGE_MODEL_MAP: Record<string, string> = {
-  'grok-imagine': 'grok-imagine-image',
+  'grok-imagine': 'grok-imagine-image-quality',
 }
 
 /** Map our TTS model IDs to xAI upstream model names */
@@ -126,16 +126,16 @@ export class XAIAdapter implements Adapter {
     const r: any = await this.callJson('POST', '/images/generations', {
       model: upstreamModel,
       prompt: req.prompt,
+      aspect_ratio: req.aspectRatio ?? '16:9',
+      resolution: '2k',
       n: 1,
-      // ASSUMPTION: xAI accepts response_format; if not, omit this field.
-      response_format: 'url',
     })
 
     return {
       status: 'succeeded',
-      outputs: (r.data as Array<{ url: string }>).map(d => ({
+      outputs: (r.data as Array<{ url?: string; b64_json?: string }>).map(d => ({
         kind: 'image' as const,
-        url: d.url,
+        url: d.url ?? (d.b64_json ? `data:image/png;base64,${d.b64_json}` : undefined),
         mime_type: 'image/png',
       })),
       provider: 'xai',
