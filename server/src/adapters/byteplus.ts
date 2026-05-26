@@ -1,30 +1,15 @@
 /**
- * Byteplus ModelArk Adapter
+ * Byteplus ModelArk Adapter — Volcengine Beijing region
  *
  * Supported models:
  *   Image (sync):  seedream-4.5, seedream-5.0
  *   Video (async): seedance-2.0, seedance-2.0-fast
  *
- * Auth: Bearer ${apiKey} (ark-... style API key)
- * Base: https://ark.ap-southeast.bytepluses.com/api/v3
+ * Auth: Bearer ${BYTEPLUS_API_KEY}  (ark-... token)
+ * Base: https://ark.cn-beijing.volces.com/api/v3
  *
- * CONCERNS / ASSUMPTIONS (verified via live smoke in Task 31):
- *   1. Internal model name mapping:
- *      seedream-4.5  → seedream-3-0-t2i-250415 (best guess; actual suffix date may differ)
- *      seedream-5.0  → seedream-5-0-t2i-250512 (best guess; actual date suffix may differ)
- *      seedance-2.0  → seedance-1-0-pro-250528  (best guess; v2.0 internal name unclear)
- *      seedance-2.0-fast → seedance-1-0-lite-250528 (best guess)
- *      Live smoke (Task 31) must confirm these mappings.
- *   2. Image endpoint POST /api/v3/images/generations matches OpenAI-compatible shape
- *      with `data[].url`. Assumed response_format defaults to 'url'.
- *   3. Video task creation: POST /api/v3/contents/generations/tasks
- *      Content array includes text prompt (and optionally image_url for I2V).
- *   4. Task poll: GET /api/v3/contents/generations/tasks/{id}
- *      Success shape: { status: 'succeeded', content: { video_url: '...' } }
- *   5. Base URL region: ap-southeast (Singapore). Other regions may be needed
- *      depending on account geography.
- *   6. aspectRatio is mapped to a `size` equivalent for Seedream; the upstream
- *      may accept `aspect_ratio` directly — live smoke needed.
+ * Ground truth: apps/backend/app/core/volcengine_images.py (Seedream)
+ *               apps/backend/app/workers/providers/volcengine.py (Seedance)
  */
 
 import type { Adapter, SyncResult, AsyncResult, TaskStatusResult } from './types.js'
@@ -33,26 +18,68 @@ import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 import type { VideosGenerationsRequest } from '../schemas/videos-generations.js'
 import { materializeAsset } from './materialize-asset.js'
 
-const BASE = 'https://ark.ap-southeast.bytepluses.com/api/v3'
+const BASE = 'https://ark.cn-beijing.volces.com/api/v3'
 
-/** How long callers should wait before polling Seedance tasks (5 seconds) */
 const SEEDANCE_POLL_AFTER_MS = 5_000
+const MIN_SEEDREAM_PIXELS = 3_686_400
 
-/** Map our model IDs to Byteplus upstream model names */
+/** Map our model IDs to Volcengine doubao upstream model names */
 const MODEL_MAP: Record<string, string> = {
-  'seedream-4.5':       'seedream-3-0-t2i-250415',
-  'seedream-5.0':       'seedream-5-0-t2i-250512',
-  'seedance-2.0':       'seedance-1-0-pro-250528',
-  'seedance-2.0-fast':  'seedance-1-0-lite-250528',
+  'seedream-4.5':       'doubao-seedream-4-5-251128',
+  'seedream-5.0':       'doubao-seedream-5-0-260128',
+  'seedance-2.0':       'doubao-seedance-2-0-260128',
+  'seedance-2.0-fast':  'doubao-seedance-2-0-fast-260128',
 }
 
-/** Map aspect ratio strings to pixel size strings for Seedream */
-const ASPECT_RATIO_TO_SIZE: Record<string, string> = {
-  '1:1':   '1024x1024',
-  '16:9':  '1280x720',
-  '9:16':  '720x1280',
-  '4:3':   '1024x768',
-  '3:4':   '768x1024',
+/**
+ * Volcengine Ark error codes → our error types.
+ * Source: apps/backend/app/workers/providers/volcengine.py VOLCENGINE_ERROR_CODES
+ */
+const VOLCENGINE_ERROR_CODES: Record<string, { message: string; kind: 'rejected' | 'unavailable' | 'quota' }> = {
+  'SensitiveContentDetected':                                { message: 'Sensitive content detected', kind: 'rejected' },
+  'InputTextSensitiveContentDetected':                       { message: 'Input text contains sensitive content', kind: 'rejected' },
+  'InputImageSensitiveContentDetected':                      { message: 'Input image contains sensitive content', kind: 'rejected' },
+  'InputVideoSensitiveContentDetected':                      { message: 'Input video contains sensitive content', kind: 'rejected' },
+  'OutputVideoSensitiveContentDetected':                     { message: 'Output video contains sensitive content', kind: 'rejected' },
+  'OutputAudioSensitiveContentDetected':                     { message: 'Output audio contains sensitive content', kind: 'rejected' },
+  'OutputVideoSensitiveContentDetected.PolicyViolation':     { message: 'Output video copyright restriction', kind: 'rejected' },
+  'InputImageSensitiveContentDetected.PrivacyInformation':   { message: 'Input image may contain real person', kind: 'rejected' },
+  'QuotaExceeded':         { message: 'Quota exhausted', kind: 'quota' },
+  'ServerOverloaded':      { message: 'Server overloaded', kind: 'unavailable' },
+  'InternalServiceError':  { message: 'Internal service error', kind: 'unavailable' },
+}
+
+/**
+ * Translate our canonical aspect ratio string into an explicit WxH size.
+ * Seedream 5.0 enforces a 3,686,400-pixel minimum.
+ * Logic mirrors volcengine_images.py aspect_ratio_to_seedream_size().
+ */
+export function aspectRatioToSeeadreamSize(aspectRatio: string): string {
+  let widthRatio = 16
+  let heightRatio = 9
+  try {
+    const parts = aspectRatio.split(':')
+    if (parts.length === 2) {
+      const w = parseInt(parts[0], 10)
+      const h = parseInt(parts[1], 10)
+      if (w > 0 && h > 0) { widthRatio = w; heightRatio = h }
+    }
+  } catch { /* use defaults */ }
+
+  const longR = Math.max(widthRatio, heightRatio)
+  const shortR = Math.min(widthRatio, heightRatio)
+
+  const minLong = Math.sqrt(MIN_SEEDREAM_PIXELS * longR / shortR)
+  let longSide = Math.max(2560, Math.ceil(minLong / 64) * 64)
+  let shortSide = Math.max(512, Math.ceil(longSide * shortR / longR / 64) * 64)
+
+  longSide = Math.min(longSide, 4096)
+  shortSide = Math.min(shortSide, 4096)
+
+  if (widthRatio >= heightRatio) {
+    return `${longSide}x${shortSide}`
+  }
+  return `${shortSide}x${longSide}`
 }
 
 export class ByteplusAdapter implements Adapter {
@@ -64,10 +91,6 @@ export class ByteplusAdapter implements Adapter {
     secretKey: string
     project: string
   }) {}
-
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
 
   private async call(method: 'POST' | 'GET', path: string, body?: unknown): Promise<unknown> {
     const init: RequestInit = {
@@ -99,29 +122,31 @@ export class ByteplusAdapter implements Adapter {
     return parsed
   }
 
-  // ---------------------------------------------------------------------------
-  // Adapter interface
-  // ---------------------------------------------------------------------------
-
   async imageGeneration(
     req: Extract<ImagesGenerationsRequest, { model: 'seedream-4.5' | 'seedream-5.0' }>,
   ): Promise<SyncResult> {
     const t0 = Date.now()
-
     const upstreamModel = MODEL_MAP[req.model] ?? req.model
-    const size = ASPECT_RATIO_TO_SIZE[req.aspectRatio] ?? '1024x1024'
+    const size = aspectRatioToSeeadreamSize(req.aspectRatio ?? '16:9')
 
     const body: Record<string, unknown> = {
       model: upstreamModel,
       prompt: req.prompt,
-      n: req.n ?? 1,
-      size,
       response_format: 'url',
+      stream: false,
+      watermark: false,
+      size,
+    }
+
+    // I2I: pass first input_asset URL as image field
+    if (req.input_assets && req.input_assets.length > 0) {
+      const m = await materializeAsset(req.input_assets[0], 'url')
+      body.image = m.url
     }
 
     const r: any = await this.call('POST', '/images/generations', body)
 
-    const outputs = (r.data as Array<{ url?: string; b64_json?: string }>).map(d => ({
+    const outputs = (r.data as Array<{ url?: string }>).map(d => ({
       kind: 'image' as const,
       url: d.url,
       mime_type: 'image/jpeg',
@@ -141,38 +166,25 @@ export class ByteplusAdapter implements Adapter {
   ): Promise<AsyncResult> {
     const upstreamModel = MODEL_MAP[req.model] ?? req.model
 
-    // Build content array: always include text prompt
     const content: Array<Record<string, unknown>> = [
       { type: 'text', text: req.prompt },
     ]
 
-    // If input_assets provided, materialize the first one as image_url
     if (req.input_assets && req.input_assets.length > 0) {
       const m = await materializeAsset(req.input_assets[0], 'url')
       content.push({
         type: 'image_url',
         image_url: { url: m.url },
+        role: 'reference_image',
       })
     }
 
     const body: Record<string, unknown> = {
       model: upstreamModel,
       content,
-    }
-
-    // Pass optional video parameters if provided
-    // ASSUMPTION: Byteplus accepts these as top-level request params
-    if (req.duration && req.duration !== '-1') {
-      body.duration = Number(req.duration)
-    }
-    if (req.resolution) {
-      body.resolution = req.resolution
-    }
-    if (req.ratio) {
-      body.aspect_ratio = req.ratio
-    }
-    if (req.generate_audio !== undefined) {
-      body.generate_audio = req.generate_audio
+      ratio: req.ratio ?? '16:9',
+      duration: req.duration ? Number(req.duration) : -1,
+      generate_audio: req.generate_audio ?? true,
     }
 
     const r: any = await this.call('POST', '/contents/generations/tasks', body)
@@ -191,46 +203,44 @@ export class ByteplusAdapter implements Adapter {
 
     const status: string = r.status
 
-    if (status === 'failed') {
-      return {
-        status: 'failed',
-        error: {
-          code: 'provider_unavailable',
-          message: r.error?.message ?? 'Seedance task failed',
-          provider_raw: r.error,
-        },
-        latency_ms: Date.now() - t0,
-      }
-    }
-
-    if (status === 'queued' || status === 'running') {
-      return {
-        status: 'running',
-        latency_ms: Date.now() - t0,
-        poll_after_ms: SEEDANCE_POLL_AFTER_MS,
-      }
-    }
-
     if (status === 'succeeded') {
       const videoUrl: string = r.content?.video_url
       return {
         status: 'succeeded',
-        outputs: [
-          {
-            kind: 'video',
-            url: videoUrl,
-            mime_type: 'video/mp4',
-          },
-        ],
+        outputs: [{ kind: 'video', url: videoUrl, mime_type: 'video/mp4' }],
         latency_ms: Date.now() - t0,
       }
     }
 
-    // Unknown status — treat as still running
+    if (status === 'queued' || status === 'preparing' || status === 'running') {
+      return { status: 'running', latency_ms: Date.now() - t0, poll_after_ms: SEEDANCE_POLL_AFTER_MS }
+    }
+
+    // failed or unknown — check error codes
+    const errorObj = r.error ?? {}
+    const vcCode: string = errorObj.code ?? ''
+    const vcMsg: string = errorObj.message ?? `Seedance task ${status}`
+
+    const entry = VOLCENGINE_ERROR_CODES[vcCode]
+    if (entry) {
+      const code = entry.kind === 'rejected' ? 'provider_rejected'
+        : entry.kind === 'quota' ? 'quota_exceeded'
+        : 'provider_unavailable'
+      return {
+        status: 'failed',
+        error: { code, message: entry.message, provider_raw: r.error },
+        latency_ms: Date.now() - t0,
+      }
+    }
+
     return {
-      status: 'running',
+      status: 'failed',
+      error: {
+        code: 'provider_unavailable',
+        message: vcCode ? `[${vcCode}] ${vcMsg}` : vcMsg,
+        provider_raw: r.error,
+      },
       latency_ms: Date.now() - t0,
-      poll_after_ms: SEEDANCE_POLL_AFTER_MS,
     }
   }
 }
