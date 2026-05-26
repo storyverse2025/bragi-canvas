@@ -7,10 +7,10 @@ beforeEach(() => { resetAdapterCache() })
 afterEach(() => nock.cleanAll())
 
 describe('POST /v1/chat/completions', () => {
-  it('routes to openai adapter and returns ChatCompletion', async () => {
-    process.env.OPENAI_API_KEY = 'sk-test'
-    nock('https://api.openai.com').post('/v1/chat/completions').reply(200, {
-      id: 'a', object: 'chat.completion', created: 1, model: 'gpt-5.4-pro',
+  it('routes to tokenrouter adapter and returns ChatCompletion', async () => {
+    process.env.TOKENROUTER_API_KEY = 'tr-test-key'
+    nock('https://api.tokenrouter.com').post('/v1/chat/completions').reply(200, {
+      id: 'a', object: 'chat.completion', created: 1, model: 'openai/gpt-5.5',
       choices: [{ index: 0, message: { role: 'assistant', content: 'pong' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
     })
@@ -22,6 +22,8 @@ describe('POST /v1/chat/completions', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.choices[0].message.content).toBe('pong')
+    // response model should be our public-facing name, not the upstream model
+    expect(body.model).toBe('gpt-5.4-pro')
   })
 
   it('rejects unknown model', async () => {
