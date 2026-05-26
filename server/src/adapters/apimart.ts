@@ -24,8 +24,21 @@ const SUPPORTED_SIZES = new Set([
   '16:9', '9:16', '21:9', '9:21', '7:9', '9:7',
 ])
 
-function resolveSize(aspectRatio: string): string {
-  return SUPPORTED_SIZES.has(aspectRatio) ? aspectRatio : 'auto'
+/**
+ * Map our schema size strings (OpenAI-compatible WxH) to apimart's accepted
+ * aspect-ratio strings (same set used by apimart_images.py).
+ */
+const SIZE_TO_ASPECT_RATIO: Record<string, string> = {
+  '1024x1024': '1:1',
+  '1792x1024': '16:9',
+  '1024x1792': '9:16',
+}
+
+function sizeToAspectRatio(size: string): string {
+  const ar = SIZE_TO_ASPECT_RATIO[size]
+  if (ar && SUPPORTED_SIZES.has(ar)) return ar
+  // fallback: if somehow an unrecognised size arrives, pass 'auto'
+  return 'auto'
 }
 
 export class ApimartAdapter implements Adapter {
@@ -71,14 +84,21 @@ export class ApimartAdapter implements Adapter {
   async imageGeneration(
     req: Extract<ImagesGenerationsRequest, { model: 'gpt-image-2' }>,
   ): Promise<AsyncResult> {
-    const size = resolveSize((req as any).aspectRatio ?? '16:9')
+    // Map schema size ('1024x1024' etc.) → apimart aspect-ratio string ('1:1' etc.)
+    // Mirrors the mapping in apps/backend/app/core/apimart_images.py
+    const size = sizeToAspectRatio(req.size)
 
-    const body = {
+    const body: Record<string, unknown> = {
       model: 'gpt-image-2',
       prompt: req.prompt,
-      n: 1,
+      n: req.n,          // schema: 1-4, default 1
       size,
       resolution: '2k',
+    }
+
+    // I2I: pass image URLs from input_assets (mirrors apimart_images.py _submit)
+    if (req.input_assets && req.input_assets.length > 0) {
+      body.image_urls = req.input_assets
     }
 
     const r: any = await this.call('POST', '/v1/images/generations', body)

@@ -90,6 +90,64 @@ describe('ApimartAdapter', () => {
     expect(capturedBody.resolution).toBe('2k')
   })
 
+  it('passes size and n from request — not hardcoded (P2.4 regression)', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'gpt-image-2',
+      prompt: 'x',
+      n: 4,
+      size: '1024x1792',
+    })
+
+    // size '1024x1792' must map to '9:16', not default '16:9' or 'auto'
+    expect(capturedBody.size).toBe('9:16')
+    // n must be 4, not hardcoded 1
+    expect(capturedBody.n).toBe(4)
+  })
+
+  it('maps all three schema sizes to correct aspect-ratio strings', async () => {
+    const cases: Array<{ size: '1024x1024' | '1792x1024' | '1024x1792'; expected: string }> = [
+      { size: '1024x1024', expected: '1:1' },
+      { size: '1792x1024', expected: '16:9' },
+      { size: '1024x1792', expected: '9:16' },
+    ]
+
+    for (const { size, expected } of cases) {
+      let captured: any = null
+      nock(BASE)
+        .post('/v1/images/generations', (body) => { captured = body; return true })
+        .reply(200, submitFx)
+
+      const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+      await adapter.imageGeneration!({ model: 'gpt-image-2', prompt: 'test', n: 1, size })
+
+      expect(captured.size).toBe(expected)
+    }
+  })
+
+  it('sends image_urls when input_assets are provided', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'gpt-image-2',
+      prompt: 'edit this image',
+      n: 1,
+      size: '1024x1024',
+      input_assets: ['https://example.com/ref.png'],
+    })
+
+    expect(capturedBody.image_urls).toEqual(['https://example.com/ref.png'])
+  })
+
   it('4xx error maps to provider_invalid_request', async () => {
     nock(BASE)
       .post('/v1/images/generations')
