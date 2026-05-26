@@ -6,6 +6,7 @@ beforeEach(() => {
   delete process.env.OPENAI_API_KEY
   delete process.env.GEMINI_API_KEY
   delete process.env.FAL_API_KEY
+  delete process.env.APIMART_API_KEY
 })
 
 describe('adapterFor', () => {
@@ -33,5 +34,15 @@ describe('adapterFor', () => {
       expect(e.code).toBe('provider_unavailable')
       expect(e.httpStatus).toBe(503)
     }
+  })
+
+  it('throws provider_unavailable for apimart when key missing', () => {
+    expect(() => adapterFor('apimart')).toThrow(/provider apimart not configured/)
+  })
+
+  it('returns ApimartAdapter when APIMART_API_KEY present', () => {
+    process.env.APIMART_API_KEY = 'sk-apimart-test'
+    const a = adapterFor('apimart')
+    expect(a.name).toBe('apimart')
   })
 })

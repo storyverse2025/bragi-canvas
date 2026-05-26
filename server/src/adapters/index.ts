@@ -7,6 +7,7 @@ import { LumaAdapter } from './luma.js'
 import { XAIAdapter } from './xai.js'
 import { LegnextAdapter } from './legnext.js'
 import { TokenrouterAdapter } from './tokenrouter.js'
+import { ApimartAdapter } from './apimart.js'
 import type { Provider } from '../registry.js'
 import { ApiError } from '../errors.js'
 
@@ -49,6 +50,12 @@ function get(p: Provider): Adapter {
     case 'tokenrouter':
       if (E.TOKENROUTER_API_KEY) a = new TokenrouterAdapter(E.TOKENROUTER_API_KEY)
       break
+    case 'apimart': {
+      const k = E.APIMART_API_KEY
+      const bu = E.APIMART_BASE_URL ?? 'https://api.apimart.ai'
+      if (k) a = new ApimartAdapter({ apiKey: k, baseUrl: bu })
+      break
+    }
   }
   if (!a) throw new ApiError('provider_unavailable', `provider ${p} not configured (missing key)`, 503)
   adapters[p] = a

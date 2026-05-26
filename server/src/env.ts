@@ -16,9 +16,13 @@ const EnvSchema = z.object({
   BYTEPLUS_PROJECT: z.string().optional(),
   FAL_API_KEY: z.string().optional(),
   LUMA_TOKEN: z.string().optional(),
+  LUMA_PROXY_BEARER_TOKEN: z.string().optional(),
+  LUMA_PROXY_BASE_URL: z.string().optional().default('https://luma.bragi.now'),
   XAI_API_KEY: z.string().optional(),
   LEGNEXT_API_KEY: z.string().optional(),
   TOKENROUTER_API_KEY: z.string().optional(),
+  APIMART_API_KEY: z.string().optional(),
+  APIMART_BASE_URL: z.string().optional().default('https://api.apimart.ai'),
 })
 
 export const env = EnvSchema.parse(process.env)

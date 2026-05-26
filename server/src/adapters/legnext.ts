@@ -101,24 +101,12 @@ export class LegnextAdapter implements Adapter {
   async imageGeneration(
     req: Extract<ImagesGenerationsRequest, { model: 'midjourney-v8' | 'midjourney-niji-7' }>,
   ): Promise<AsyncResult> {
-    const upstreamModel = MODEL_MAP[req.model] ?? req.model
-
-    // ASSUMPTION: Legnext accepts { prompt, model, quality } at POST /imagine
-    // Verify exact field names and values via vendor portal.
-    const body: Record<string, unknown> = {
-      prompt: req.prompt,
-      model: upstreamModel,
-      quality: req.quality ?? 'medium',
-    }
-
-    const r: any = await this.call('POST', '/imagine', body)
-
-    return {
-      status: 'queued',
-      provider: 'legnext',
-      provider_task_id: r.task_id as string,
-      poll_after_ms: LEGNEXT_POLL_AFTER_MS,
-    }
+    throw new ApiError(
+      'unknown_model',
+      `${req.model} is not supported in V1. Contact team for Midjourney access.`,
+      501,
+      null,
+    )
   }
 
   async taskStatus(taskId: string): Promise<TaskStatusResult> {
