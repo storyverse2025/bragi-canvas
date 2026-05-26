@@ -143,11 +143,15 @@ export class ByteplusAdapter implements Adapter {
       size,
     }
 
-    // I2I: pass first input_asset URL as image field (schema may not expose input_assets on all variants)
-    const inputAssets = (req as unknown as { input_assets?: string[] }).input_assets
-    if (inputAssets && inputAssets.length > 0) {
-      const m = await materializeAsset(inputAssets[0], 'url')
-      body.image = m.url
+    // I2I: materialize input_assets as inline-base64 and pass as image field (mirrors team volcengine_images.py)
+    if (req.input_assets && req.input_assets.length > 0) {
+      const resolved = await Promise.all(
+        req.input_assets.map(async (id) => {
+          const m = await materializeAsset(id, 'inline-base64')
+          return m.base64 as string
+        })
+      )
+      body.image = resolved.length === 1 ? resolved[0] : resolved
     }
 
     const r: any = await this.call('POST', '/images/generations', body)

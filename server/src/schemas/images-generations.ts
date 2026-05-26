@@ -19,6 +19,7 @@ export const ImagesGenerationsBody = z.discriminatedUnion('model', [
     prompt: z.string().min(1),
     aspectRatio: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']),
     n: z.number().int().min(1).max(4).default(1),
+    input_assets: z.array(z.string()).max(3).optional(),
   }),
   z.object({
     model: z.literal('grok-imagine'),

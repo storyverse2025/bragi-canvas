@@ -1,10 +1,14 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import nock from 'nock'
 import imgFx from '../fixtures/byteplus/image-success.json' with { type: 'json' }
 import videoCreatedFx from '../fixtures/byteplus/video-task-created.json' with { type: 'json' }
 import videoSucceededFx from '../fixtures/byteplus/video-task-succeeded.json' with { type: 'json' }
 import errorFx from '../fixtures/byteplus/error-400.json' with { type: 'json' }
 import { ByteplusAdapter, aspectRatioToSeeadreamSize } from '../../src/adapters/byteplus.js'
+import { storeAsset } from '../../src/assets.js'
 
 const BASE = 'https://ark.cn-beijing.volces.com'
 
@@ -14,6 +18,15 @@ const config = {
   secretKey: 'test-secret-key',
   project: 'test-project',
 }
+
+beforeEach(async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'router-byteplus-'))
+  process.env.ASSET_TMP_DIR = dir
+  process.env.ASSET_SIGNING_SECRET = '0123456789abcdef0123456789abcdef'
+  process.env.ROUTER_PUBLIC_URL = 'https://router.test'
+  await storeAsset(dir, 'ast_img1', Buffer.from('IMGDATA1'), 'image/png')
+  await storeAsset(dir, 'ast_img2', Buffer.from('IMGDATA2'), 'image/png')
+})
 
 afterEach(() => {
   nock.cleanAll()
@@ -136,5 +149,48 @@ describe('ByteplusAdapter', () => {
         n: 1,
       })
     ).rejects.toMatchObject({ code: 'provider_invalid_request' })
+  })
+
+  it('imageGeneration with single input_asset sends image as base64 string', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/api/v3/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, imgFx)
+
+    const adapter = new ByteplusAdapter(config)
+    const result = await adapter.imageGeneration!({
+      model: 'seedream-5.0',
+      prompt: 'make it better',
+      aspectRatio: '1:1',
+      n: 1,
+      input_assets: ['ast_img1'],
+    })
+
+    expect(result.status).toBe('succeeded')
+    expect(typeof capturedBody.image).toBe('string')
+    expect(capturedBody.image).toBe(Buffer.from('IMGDATA1').toString('base64'))
+  })
+
+  it('imageGeneration with two input_assets sends image as base64 array', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/api/v3/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, imgFx)
+
+    const adapter = new ByteplusAdapter(config)
+    const result = await adapter.imageGeneration!({
+      model: 'seedream-5.0',
+      prompt: 'merge these',
+      aspectRatio: '16:9',
+      n: 1,
+      input_assets: ['ast_img1', 'ast_img2'],
+    })
+
+    expect(result.status).toBe('succeeded')
+    expect(Array.isArray(capturedBody.image)).toBe(true)
+    expect(capturedBody.image).toEqual([
+      Buffer.from('IMGDATA1').toString('base64'),
+      Buffer.from('IMGDATA2').toString('base64'),
+    ])
   })
 })
