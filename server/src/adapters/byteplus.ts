@@ -141,6 +141,7 @@ export class ByteplusAdapter implements Adapter {
       stream: false,
       watermark: false,
       size,
+      n: req.n ?? 1,  // schema: 1-4, default 1
     }
 
     // I2I: materialize input_assets as inline-base64 and pass as image field (mirrors team volcengine_images.py)

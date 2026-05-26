@@ -12,7 +12,7 @@ describe('VideosGenerationsBody', () => {
     const r = VideosGenerationsBody.parse({
       model: 'seedance-2.0', prompt: 'x', ratio: '16:9',
     })
-    expect(r.resolution).toBe('1080p')
+    // resolution was removed from schema (Volcengine Ark does not accept it)
     expect(r.generate_audio).toBe(true)
   })
   it('rejects unknown video model', () => {

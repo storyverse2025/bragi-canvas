@@ -13,7 +13,6 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     prompt: z.string().min(1),
     input_assets: z.array(z.string()).max(1).optional(),
     duration: z.enum(['-1', '5', '10']).default('-1'),
-    resolution: z.enum(['480p', '720p', '1080p']).default('1080p'),
     ratio: z.enum(['9:16', '16:9', '1:1']),
     generate_audio: z.boolean().default(true),
   }),

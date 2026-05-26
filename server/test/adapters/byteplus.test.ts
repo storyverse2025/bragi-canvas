@@ -95,7 +95,6 @@ describe('ByteplusAdapter', () => {
       prompt: 'a drone flying over a city',
       ratio: '16:9',
       duration: '5',
-      resolution: '1080p',
       generate_audio: true,
     })
 
@@ -192,5 +191,22 @@ describe('ByteplusAdapter', () => {
       Buffer.from('IMGDATA1').toString('base64'),
       Buffer.from('IMGDATA2').toString('base64'),
     ])
+  })
+
+  it('imageGeneration passes n from request to upstream — not hardcoded', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/api/v3/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, imgFx)
+
+    const adapter = new ByteplusAdapter(config)
+    await adapter.imageGeneration!({
+      model: 'seedream-5.0',
+      prompt: 'four variations',
+      aspectRatio: '1:1',
+      n: 4,
+    })
+
+    expect(capturedBody.n).toBe(4)
   })
 })
