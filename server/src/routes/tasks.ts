@@ -5,7 +5,7 @@ import { ApiError, toErrorResponse } from '../errors.js'
 import type { Provider } from '../registry.js'
 
 const VALID_PROVIDERS = new Set<Provider>([
-  'openai', 'gemini', 'byteplus', 'fal', 'luma', 'xai', 'legnext', 'tokenrouter',
+  'openai', 'gemini', 'byteplus', 'fal', 'luma', 'xai', 'legnext', 'tokenrouter', 'apimart',
 ])
 
 export const tasksRoute = new OpenAPIHono()
