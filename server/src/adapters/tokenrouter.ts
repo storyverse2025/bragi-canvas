@@ -30,10 +30,13 @@ const BASE = 'https://api.tokenrouter.com/v1'
 
 /**
  * Map our model IDs to Tokenrouter upstream model names.
- * ASSUMPTION: Verify exact upstream model names via vendor portal or API docs.
+ * Source: apps/backend/app/core/config.py
  */
 const MODEL_MAP: Record<string, string> = {
-  'qwen-3-6-plus': 'qwen/qwen3.6-plus',
+  'qwen-3-6-plus':  'qwen/qwen3.6-plus',
+  'gpt-5.4-pro':    'openai/gpt-5.5',
+  'gemini-3.1-pro': 'google/gemini-3.1-pro-preview',
+  'gemini-3-flash': 'google/gemini-3-flash-preview',
 }
 
 export class TokenrouterAdapter implements Adapter {
@@ -50,7 +53,7 @@ export class TokenrouterAdapter implements Adapter {
   }
 
   async chatCompletion(
-    req: Extract<ChatCompletionsRequest, { model: 'qwen-3-6-plus' }>,
+    req: ChatCompletionsRequest,
   ): Promise<SyncResult> {
     const t0 = Date.now()
 
