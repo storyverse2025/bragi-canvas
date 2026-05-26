@@ -36,4 +36,37 @@ describe('GET /v1/tasks/:provider/:task_id', () => {
     const body = await res.json()
     expect(body.error.code).toBe('invalid_request')
   })
+
+  it('rejects sync-only provider openai with 400 invalid_request', async () => {
+    const res = await buildApp().request('/v1/tasks/openai/some-task', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer svsk-test-1' },
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error.code).toBe('invalid_request')
+    expect(body.error.message).toMatch(/sync-only/)
+  })
+
+  it('rejects sync-only provider xai with 400 invalid_request', async () => {
+    const res = await buildApp().request('/v1/tasks/xai/some-task', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer svsk-test-1' },
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error.code).toBe('invalid_request')
+    expect(body.error.message).toMatch(/sync-only/)
+  })
+
+  it('rejects sync-only provider tokenrouter with 400 invalid_request', async () => {
+    const res = await buildApp().request('/v1/tasks/tokenrouter/some-task', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer svsk-test-1' },
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error.code).toBe('invalid_request')
+    expect(body.error.message).toMatch(/sync-only/)
+  })
 })
