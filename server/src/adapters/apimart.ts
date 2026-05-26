@@ -49,7 +49,12 @@ export class ApimartAdapter implements Adapter {
     }
     if (body !== undefined) init.body = JSON.stringify(body)
 
-    const res = await fetch(`${this.baseUrl}${path}`, init)
+    let res: Response
+    try {
+      res = await fetch(`${this.baseUrl}${path}`, init)
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `apimart network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
     const text = await res.text()
     let parsed: any
     try { parsed = JSON.parse(text) } catch { parsed = text }

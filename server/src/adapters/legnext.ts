@@ -71,7 +71,12 @@ export class LegnextAdapter implements Adapter {
       init.body = JSON.stringify(body)
     }
 
-    const res = await fetch(`${BASE}${path}`, init)
+    let res: Response
+    try {
+      res = await fetch(`${BASE}${path}`, init)
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `legnext network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
     const text = await res.text()
     let parsed: any
     try { parsed = JSON.parse(text) } catch { parsed = text }

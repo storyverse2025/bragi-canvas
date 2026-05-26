@@ -63,7 +63,12 @@ export class XAIAdapter implements Adapter {
       init.body = JSON.stringify(body)
     }
 
-    const res = await fetch(`${BASE}${path}`, init)
+    let res: Response
+    try {
+      res = await fetch(`${BASE}${path}`, init)
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `xai network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
     const text = await res.text()
     let parsed: any
     try { parsed = JSON.parse(text) } catch { parsed = text }
@@ -85,14 +90,19 @@ export class XAIAdapter implements Adapter {
    * Binary POST helper — for TTS which returns raw audio bytes.
    */
   private async callBinary(path: string, body: unknown): Promise<{ bytes: Buffer; mimeType: string }> {
-    const res = await fetch(`${BASE}${path}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
+    let res: Response
+    try {
+      res = await fetch(`${BASE}${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `xai network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
 
     if (!res.ok) {
       const text = await res.text()

@@ -65,7 +65,12 @@ export class LumaAdapter implements Adapter {
     }
     if (body !== undefined) init.body = JSON.stringify(body)
 
-    const res = await fetch(`${this.proxyBaseUrl}${path}`, init)
+    let res: Response
+    try {
+      res = await fetch(`${this.proxyBaseUrl}${path}`, init)
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `luma network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
     const text = await res.text()
     let parsed: any
     try { parsed = JSON.parse(text) } catch { parsed = text }
@@ -88,7 +93,12 @@ export class LumaAdapter implements Adapter {
     }
     if (body !== undefined) init.body = JSON.stringify(body)
 
-    const res = await fetch(`${VIDEO_BASE}${path}`, init)
+    let res: Response
+    try {
+      res = await fetch(`${VIDEO_BASE}${path}`, init)
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `luma network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
     const text = await res.text()
     let parsed: any
     try { parsed = JSON.parse(text) } catch { parsed = text }

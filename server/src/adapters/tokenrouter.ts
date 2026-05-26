@@ -57,19 +57,24 @@ export class TokenrouterAdapter implements Adapter {
   ): Promise<SyncResult> {
     const t0 = Date.now()
 
-    const res = await fetch(`${BASE}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.upstreamModel(req.model),
-        messages: req.messages,
-        temperature: req.temperature,
-        stream: false,
-      }),
-    })
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.upstreamModel(req.model),
+          messages: req.messages,
+          temperature: req.temperature,
+          stream: false,
+        }),
+      })
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `tokenrouter network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
 
     const text = await res.text()
     let parsed: any

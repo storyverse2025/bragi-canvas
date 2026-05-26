@@ -10,14 +10,19 @@ export class OpenAIAdapter implements Adapter {
   constructor(private apiKey: string) {}
 
   private async call(path: string, body: unknown): Promise<unknown> {
-    const res = await fetch(`${BASE}${path}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
+    let res: Response
+    try {
+      res = await fetch(`${BASE}${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `openai network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
     const text = await res.text()
     let parsed: any
     try { parsed = JSON.parse(text) } catch { parsed = text }

@@ -96,4 +96,18 @@ describe('TokenrouterAdapter', () => {
       })
     ).rejects.toMatchObject({ code: 'provider_invalid_request' })
   })
+
+  it('network failure maps to provider_unavailable 503', async () => {
+    nock(BASE)
+      .post('/v1/chat/completions')
+      .replyWithError('ECONNREFUSED')
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await expect(
+      adapter.chatCompletion!({
+        model: 'qwen-3-6-plus',
+        messages: [{ role: 'user', content: 'hi' }],
+      })
+    ).rejects.toMatchObject({ code: 'provider_unavailable', httpStatus: 503 })
+  })
 })

@@ -69,14 +69,19 @@ export class GeminiAdapter implements Adapter {
 
   private async call(path: string, body: unknown): Promise<unknown> {
     const t0 = Date.now()
-    const res = await fetch(`${BASE}${path}`, {
-      method: 'POST',
-      headers: {
-        'x-goog-api-key': this.apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
+    let res: Response
+    try {
+      res = await fetch(`${BASE}${path}`, {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': this.apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `gemini network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
     const text = await res.text()
     let parsed: any
     try { parsed = JSON.parse(text) } catch { parsed = text }
@@ -94,10 +99,15 @@ export class GeminiAdapter implements Adapter {
 
   /** GET a long-running operation status (no body) */
   private async pollOperation(operationName: string): Promise<unknown> {
-    const res = await fetch(`${BASE}/${operationName}`, {
-      method: 'GET',
-      headers: { 'x-goog-api-key': this.apiKey },
-    })
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/${operationName}`, {
+        method: 'GET',
+        headers: { 'x-goog-api-key': this.apiKey },
+      })
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `gemini network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
     const text = await res.text()
     let parsed: any
     try { parsed = JSON.parse(text) } catch { parsed = text }

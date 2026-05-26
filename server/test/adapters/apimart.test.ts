@@ -105,4 +105,31 @@ describe('ApimartAdapter', () => {
       })
     ).rejects.toMatchObject({ code: 'provider_invalid_request' })
   })
+
+  it('network failure on imageGeneration maps to provider_unavailable 503', async () => {
+    nock(BASE)
+      .post('/v1/images/generations')
+      .replyWithError('ECONNREFUSED')
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await expect(
+      adapter.imageGeneration!({
+        model: 'gpt-image-2',
+        prompt: 'test',
+        n: 1,
+        size: '1024x1024',
+      })
+    ).rejects.toMatchObject({ code: 'provider_unavailable', httpStatus: 503 })
+  })
+
+  it('network failure on taskStatus maps to provider_unavailable 503', async () => {
+    nock(BASE)
+      .get('/v1/tasks/apimart-task-net-fail')
+      .replyWithError('ETIMEDOUT')
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await expect(
+      adapter.taskStatus!('apimart-task-net-fail')
+    ).rejects.toMatchObject({ code: 'provider_unavailable', httpStatus: 503 })
+  })
 })

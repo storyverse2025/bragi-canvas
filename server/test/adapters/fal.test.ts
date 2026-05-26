@@ -176,4 +176,20 @@ describe('FalAdapter', () => {
       })
     ).rejects.toMatchObject({ code: 'provider_invalid_request' })
   })
+
+  it('network failure on videoGeneration maps to provider_unavailable 503', async () => {
+    nock(BASE)
+      .post(KLING_O3_PATH)
+      .replyWithError('ECONNREFUSED')
+
+    const adapter = new FalAdapter('fal-test-key')
+    await expect(
+      adapter.videoGeneration!({
+        model: 'kling-3.0',
+        prompt: 'test video',
+        duration: '5',
+        aspectRatio: '16:9',
+      })
+    ).rejects.toMatchObject({ code: 'provider_unavailable', httpStatus: 503 })
+  })
 })
