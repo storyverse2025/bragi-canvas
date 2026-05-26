@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
+import { cors } from 'hono/cors'
 import { env } from './env.js'
 import { healthRoute } from './routes/health.js'
 import { authRoute } from './routes/auth.js'
@@ -14,6 +15,14 @@ import { tasksRoute } from './routes/tasks.js'
 import { requireBragiToken } from './auth.js'
 
 const app = new OpenAPIHono()
+app.use('*', cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'OPTIONS'],
+  allowHeaders: ['Authorization', 'Content-Type', 'X-Requested-With'],
+  exposeHeaders: ['Content-Type', 'Content-Length'],
+  maxAge: 86400,
+  credentials: false,
+}))
 app.route('/v1', healthRoute)
 app.route('/v1', assetsRoute)
 app.use('/v1/auth/*', requireBragiToken(env.BRAGI_TOKENS))

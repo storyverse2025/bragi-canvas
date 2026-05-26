@@ -1,4 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
+import { cors } from 'hono/cors'
 import { healthRoute } from '../src/routes/health.js'
 import { authRoute } from '../src/routes/auth.js'
 import { uploadsRoute } from '../src/routes/uploads.js'
@@ -14,6 +15,14 @@ const TEST_TOKENS = new Set(['svsk-test-1', 'svsk-test-2'])
 
 export function buildApp(): OpenAPIHono {
   const app = new OpenAPIHono()
+  app.use('*', cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['Authorization', 'Content-Type', 'X-Requested-With'],
+    exposeHeaders: ['Content-Type', 'Content-Length'],
+    maxAge: 86400,
+    credentials: false,
+  }))
   app.route('/v1', healthRoute)
   app.route('/v1', assetsRoute)                          // BEFORE auth — sig is the auth
   app.use('/v1/auth/*', requireBragiToken(TEST_TOKENS))
