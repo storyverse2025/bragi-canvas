@@ -34,9 +34,12 @@ function get(p: Provider): Adapter {
     case 'fal':
       if (E.FAL_API_KEY) a = new FalAdapter(E.FAL_API_KEY)
       break
-    case 'luma':
-      if (E.LUMA_TOKEN) a = new LumaAdapter(E.LUMA_TOKEN)
+    case 'luma': {
+      const bt = E.LUMA_PROXY_BEARER_TOKEN ?? E.LUMA_TOKEN
+      const bu = E.LUMA_PROXY_BASE_URL ?? 'https://luma.bragi.now'
+      if (bt) a = new LumaAdapter({ bearerToken: bt, baseUrl: bu })
       break
+    }
     case 'xai':
       if (E.XAI_API_KEY) a = new XAIAdapter(E.XAI_API_KEY)
       break

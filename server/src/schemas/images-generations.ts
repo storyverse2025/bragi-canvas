@@ -31,6 +31,12 @@ export const ImagesGenerationsBody = z.discriminatedUnion('model', [
     niji: z.boolean().optional(),
     quality: z.enum(['low', 'medium', 'high']).default('medium'),
   }),
+  z.object({
+    model: z.literal('luma-uni-1'),
+    prompt: z.string().min(1),
+    aspectRatio: z.enum(['1:1', '16:9', '9:16', '3:2', '2:3']).optional().default('16:9'),
+    input_assets: z.array(z.string()).max(1).optional(),
+  }),
 ])
 
 export type ImagesGenerationsRequest = z.infer<typeof ImagesGenerationsBody>
