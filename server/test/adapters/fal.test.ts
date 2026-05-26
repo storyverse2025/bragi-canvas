@@ -1,4 +1,7 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import nock from 'nock'
 import videoSubmitFx from '../fixtures/fal/video-submit.json' with { type: 'json' }
 import grokVideoSubmitFx from '../fixtures/fal/grok-video-submit.json' with { type: 'json' }
@@ -8,6 +11,7 @@ import taskInQueueFx from '../fixtures/fal/task-status-in-queue.json' with { typ
 import taskCompletedFx from '../fixtures/fal/task-status-completed.json' with { type: 'json' }
 import videoResultFx from '../fixtures/fal/video-result.json' with { type: 'json' }
 import { FalAdapter } from '../../src/adapters/fal.js'
+import { storeAsset } from '../../src/assets.js'
 
 const BASE = 'https://queue.fal.run'
 // kling 2.6 and 3.0 both use o3/pro/reference-to-video
@@ -15,6 +19,14 @@ const KLING_O3_PATH = '/fal-ai/kling-video/o3/pro/reference-to-video'
 const GROK_VIDEO_PATH = '/xai/grok-imagine-video/image-to-video'
 const MUSIC_PATH = '/fal-ai/elevenlabs/music'
 const NANO_BANANA_2_PATH = '/fal-ai/nano-banana-2'
+
+beforeEach(async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'router-fal-'))
+  process.env.ASSET_TMP_DIR = dir
+  process.env.ASSET_SIGNING_SECRET = '0123456789abcdef0123456789abcdef'
+  process.env.ROUTER_PUBLIC_URL = 'https://router.test'
+  await storeAsset(dir, 'asset_abc123', Buffer.from('IMGDATA'), 'image/png')
+})
 
 afterEach(() => {
   nock.cleanAll()
@@ -68,6 +80,7 @@ describe('FalAdapter', () => {
       model: 'grok-video',
       prompt: 'a futuristic city with flying cars',
       duration: '6',
+      input_assets: ['asset_abc123'],
     })
 
     expect(result.status).toBe('queued')

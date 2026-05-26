@@ -20,7 +20,7 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
   z.object({
     model: z.literal('grok-video'),
     prompt: z.string().min(1),
-    input_assets: z.array(z.string()).max(1).optional(),
+    input_assets: z.array(z.string()).min(1).max(1),
     duration: z.enum(['6']),
   }),
   z.object({

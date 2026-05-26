@@ -138,9 +138,10 @@ export class ByteplusAdapter implements Adapter {
       size,
     }
 
-    // I2I: pass first input_asset URL as image field
-    if (req.input_assets && req.input_assets.length > 0) {
-      const m = await materializeAsset(req.input_assets[0], 'url')
+    // I2I: pass first input_asset URL as image field (schema may not expose input_assets on all variants)
+    const inputAssets = (req as unknown as { input_assets?: string[] }).input_assets
+    if (inputAssets && inputAssets.length > 0) {
+      const m = await materializeAsset(inputAssets[0], 'url')
       body.image = m.url
     }
 
