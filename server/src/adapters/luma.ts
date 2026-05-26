@@ -16,9 +16,16 @@
 
 import type { Adapter, SyncResult, AsyncResult, TaskStatusResult } from './types.js'
 import { ApiError } from '../errors.js'
-import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 import type { VideosGenerationsRequest } from '../schemas/videos-generations.js'
 import { materializeAsset } from './materialize-asset.js'
+
+/** Local type for luma-uni-1 image generation (model removed from images schema since it's video-only in V1 registry) */
+type LumaImageRequest = {
+  model: 'luma-uni-1'
+  prompt: string
+  aspectRatio?: '1:1' | '16:9' | '9:16' | '3:2' | '2:3'
+  input_assets?: string[]
+}
 
 const VIDEO_BASE = 'https://api.lumalabs.ai/dream-machine/v1'
 const LUMA_POLL_AFTER_MS = 5_000
@@ -95,7 +102,7 @@ export class LumaAdapter implements Adapter {
   }
 
   async imageGeneration(
-    req: Extract<ImagesGenerationsRequest, { model: 'luma-uni-1' }>,
+    req: LumaImageRequest,
   ): Promise<SyncResult> {
     const t0 = Date.now()
     const hasAssets = req.input_assets && req.input_assets.length > 0
