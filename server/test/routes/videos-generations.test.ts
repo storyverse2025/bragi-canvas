@@ -10,7 +10,7 @@ describe('POST /v1/videos/generations', () => {
   it('routes to fal adapter and returns 202 with task_id', async () => {
     process.env.FAL_API_KEY = 'fal-test'
     nock('https://queue.fal.run')
-      .post('/fal-ai/kling-video/v3/text-to-video')
+      .post('/fal-ai/kling-video/o3/pro/reference-to-video')
       .reply(200, { request_id: 'req-xyz-999' })
     const res = await buildApp().request('/v1/videos/generations', {
       method: 'POST',

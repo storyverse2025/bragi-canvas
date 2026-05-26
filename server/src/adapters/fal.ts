@@ -31,6 +31,7 @@
 
 import type { Adapter, AsyncResult, TaskStatusResult } from './types.js'
 import { ApiError } from '../errors.js'
+import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 import type { VideosGenerationsRequest } from '../schemas/videos-generations.js'
 import type { AudioMusicRequest } from '../schemas/audio-music.js'
 import type { AudioSfxRequest } from '../schemas/audio-sfx.js'
@@ -57,19 +58,19 @@ interface ModelEntry {
 
 const MODEL_MAP: Record<string, ModelEntry> = {
   'kling-2.6': {
-    path: 'fal-ai/kling-video/v2.6/text-to-video',
-    t2vPath: 'fal-ai/kling-video/v2.6/text-to-video',
-    i2vPath: 'fal-ai/kling-video/v2.6/image-to-video',
+    path: 'fal-ai/kling-video/o3/pro/reference-to-video',
+    t2vPath: 'fal-ai/kling-video/o3/pro/reference-to-video',
+    i2vPath: 'fal-ai/kling-video/o3/pro/reference-to-video',
   },
   'kling-3.0': {
-    path: 'fal-ai/kling-video/v3/text-to-video',
-    t2vPath: 'fal-ai/kling-video/v3/text-to-video',
-    i2vPath: 'fal-ai/kling-video/v3/image-to-video',
+    path: 'fal-ai/kling-video/o3/pro/reference-to-video',
+    t2vPath: 'fal-ai/kling-video/o3/pro/reference-to-video',
+    i2vPath: 'fal-ai/kling-video/o3/pro/reference-to-video',
   },
   'grok-video': {
-    path: 'fal-ai/grok-video',
-    t2vPath: 'fal-ai/grok-video',
-    i2vPath: 'fal-ai/grok-video',
+    path: 'xai/grok-imagine-video/image-to-video',
+    t2vPath: 'xai/grok-imagine-video/image-to-video',
+    i2vPath: 'xai/grok-imagine-video/image-to-video',
   },
   'elevenlabs-music': {
     path: 'fal-ai/elevenlabs/music',
@@ -79,6 +80,17 @@ const MODEL_MAP: Record<string, ModelEntry> = {
   },
   'elevenlabs-tts-v3': {
     path: 'fal-ai/elevenlabs/tts/v3',
+  },
+  // Image models
+  'nano-banana-pro': {
+    path: 'fal-ai/nano-banana-pro',
+    t2vPath: 'fal-ai/nano-banana-pro',
+    i2vPath: 'fal-ai/nano-banana-pro/edit',
+  },
+  'nano-banana-2': {
+    path: 'fal-ai/nano-banana-2',
+    t2vPath: 'fal-ai/nano-banana-2',
+    i2vPath: 'fal-ai/nano-banana-2/edit',
   },
 }
 
@@ -149,6 +161,36 @@ export class FalAdapter implements Adapter {
   // Adapter interface
   // ---------------------------------------------------------------------------
 
+  async imageGeneration(
+    req: Extract<ImagesGenerationsRequest, { model: 'nano-banana-pro' | 'nano-banana-2' }>,
+  ): Promise<AsyncResult> {
+    const entry = MODEL_MAP[req.model]
+    if (!entry) {
+      throw new ApiError('provider_invalid_request', `Unknown fal image model: ${req.model}`, 400, null)
+    }
+
+    const hasAssets = req.input_assets && req.input_assets.length > 0
+    const modelPath = hasAssets ? (entry.i2vPath ?? entry.path) : (entry.t2vPath ?? entry.path)
+
+    const body: Record<string, unknown> = {
+      prompt: req.prompt,
+      num_images: 1,
+      aspect_ratio: req.aspectRatio ?? '16:9',
+      output_format: 'png',
+    }
+
+    if (hasAssets) {
+      const urls: string[] = []
+      for (const asset of req.input_assets!) {
+        const m = await materializeAsset(asset, 'url')
+        if (m.url) urls.push(m.url)
+      }
+      body.image_urls = urls
+    }
+
+    return this.submitToQueue(modelPath, body)
+  }
+
   async videoGeneration(
     req: Extract<VideosGenerationsRequest, { model: 'kling-2.6' | 'kling-3.0' | 'grok-video' }>,
   ): Promise<AsyncResult> {
@@ -157,7 +199,6 @@ export class FalAdapter implements Adapter {
       throw new ApiError('provider_invalid_request', `Unknown fal video model: ${req.model}`, 400, null)
     }
 
-    // Determine path: use i2vPath when input_assets are provided, otherwise t2vPath
     const hasAssets = req.input_assets && req.input_assets.length > 0
     const modelPath = hasAssets ? (entry.i2vPath ?? entry.path) : (entry.t2vPath ?? entry.path)
 
@@ -165,21 +206,32 @@ export class FalAdapter implements Adapter {
       prompt: req.prompt,
     }
 
-    // Pass duration if present (grok-video and kling accept it)
     if ('duration' in req && req.duration) {
       body.duration = Number(req.duration)
     }
 
-    // Pass aspectRatio for kling models
     if ('aspectRatio' in req && req.aspectRatio) {
       body.aspect_ratio = req.aspectRatio
     }
 
-    // Materialize first input asset as image_url for I2V
-    // ASSUMPTION: fal uses 'image_url' field for I2V. Confirm via live smoke.
+    if ('generate_audio' in req && req.generate_audio !== undefined) {
+      body.generate_audio = req.generate_audio
+    }
+
     if (hasAssets) {
-      const m = await materializeAsset(req.input_assets![0], 'url')
-      body.image_url = m.url
+      if (req.model === 'grok-video') {
+        const m = await materializeAsset(req.input_assets![0], 'url')
+        body.image_url = m.url
+        body.resolution = '720p'
+      } else {
+        // kling: image_urls array
+        const urls: string[] = []
+        for (const asset of req.input_assets!) {
+          const m = await materializeAsset(asset, 'url')
+          if (m.url) urls.push(m.url)
+        }
+        body.image_urls = urls
+      }
     }
 
     return this.submitToQueue(modelPath, body)

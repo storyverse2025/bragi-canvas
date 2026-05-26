@@ -1,0 +1,7 @@
+{
+  "request_id": "nano-banana-req-abc123",
+  "status": "IN_QUEUE",
+  "response_url": "https://queue.fal.run/fal-ai/nano-banana-2/requests/nano-banana-req-abc123",
+  "status_url": "https://queue.fal.run/fal-ai/nano-banana-2/requests/nano-banana-req-abc123/status",
+  "cancel_url": "https://queue.fal.run/fal-ai/nano-banana-2/requests/nano-banana-req-abc123/cancel"
+}
