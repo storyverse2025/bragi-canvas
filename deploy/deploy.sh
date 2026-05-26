@@ -7,8 +7,17 @@ TS=$(date -u +%Y%m%d-%H%M%S)
 RELEASE_DIR="$REMOTE_ROOT/releases/$TS"
 
 cd "$(dirname "$0")/../server"
-echo "== build =="
+
+echo "== install =="
 pnpm install --frozen-lockfile
+
+echo "== typecheck =="
+pnpm typecheck
+
+echo "== test =="
+pnpm test
+
+echo "== build =="
 pnpm build
 
 echo "== upload =="
