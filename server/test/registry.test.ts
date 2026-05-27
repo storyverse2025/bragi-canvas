@@ -22,9 +22,14 @@ describe('registry', () => {
     expect(r).toEqual({ provider: 'tokenrouter', capability: 'text', async: false })
   })
 
-  it('looks up nano-banana-pro → fal/image/async', () => {
+  it('looks up nano-banana-pro → apimart/image/async', () => {
     const r = lookupModel('nano-banana-pro')
-    expect(r).toEqual({ provider: 'fal', capability: 'image', async: true })
+    expect(r).toEqual({ provider: 'apimart', capability: 'image', async: true })
+  })
+
+  it('looks up nano-banana-2 → apimart/image/async', () => {
+    const r = lookupModel('nano-banana-2')
+    expect(r).toEqual({ provider: 'apimart', capability: 'image', async: true })
   })
 
   it('looks up grok-video → xai/video/async (native xAI video API)', () => {

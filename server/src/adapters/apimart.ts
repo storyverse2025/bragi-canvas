@@ -1,8 +1,8 @@
 /**
- * Apimart Adapter — gpt-image-2 proxy
+ * Apimart Adapter — gpt-image-2 + nano-banana proxy
  *
  * Supported models:
- *   Image (async): gpt-image-2
+ *   Image (async): gpt-image-2, nano-banana-pro, nano-banana-2
  *
  * Auth: Bearer ${APIMART_API_KEY}
  * Base: APIMART_BASE_URL (default https://api.apimart.ai)
@@ -11,6 +11,10 @@
  *
  * Flow: POST /v1/images/generations → { data: [{ task_id }] }
  *       GET  /v1/tasks/{task_id}    → { data: { status, result: { images: [{url}] } } }
+ *
+ * nano-banana model ID mapping (apimart uses Google's model names):
+ *   nano-banana-pro → gemini-3-pro-image-preview   (Gemini-3-Pro-Image-preview)
+ *   nano-banana-2   → gemini-3.1-flash-image-preview (Gemini-3.1-Flash-Image-preview)
  */
 
 import type { Adapter, AsyncResult, TaskStatusResult } from './types.js'
@@ -40,6 +44,15 @@ function sizeToAspectRatio(size: string): string {
   if (ar && SUPPORTED_SIZES.has(ar)) return ar
   // fallback: if somehow an unrecognised size arrives, pass 'auto'
   return 'auto'
+}
+
+/**
+ * Map our canonical model IDs to apimart's upstream model IDs.
+ * apimart uses Google's official model names for nano-banana variants.
+ */
+const NANO_BANANA_MODEL_MAP: Record<string, string> = {
+  'nano-banana-pro': 'gemini-3-pro-image-preview',
+  'nano-banana-2':   'gemini-3.1-flash-image-preview',
 }
 
 export class ApimartAdapter implements Adapter {
@@ -83,18 +96,26 @@ export class ApimartAdapter implements Adapter {
   }
 
   async imageGeneration(
-    req: Extract<ImagesGenerationsRequest, { model: 'gpt-image-2' }>,
+    req: Extract<ImagesGenerationsRequest, { model: 'gpt-image-2' | 'nano-banana-pro' | 'nano-banana-2' }>,
   ): Promise<AsyncResult> {
-    // Map schema size ('1024x1024' etc.) → apimart aspect-ratio string ('1:1' etc.)
-    // Mirrors the mapping in apps/backend/app/core/apimart_images.py
-    const size = sizeToAspectRatio(req.size)
-
     const body: Record<string, unknown> = {
-      model: 'gpt-image-2',
       prompt: req.prompt,
-      n: req.n,          // schema: 1-4, default 1
-      size,
-      resolution: '2k',
+    }
+
+    if (req.model === 'gpt-image-2') {
+      // Map schema size ('1024x1024' etc.) → apimart aspect-ratio string ('1:1' etc.)
+      // Mirrors the mapping in apps/backend/app/core/apimart_images.py
+      const size = sizeToAspectRatio(req.size)
+      body.model = 'gpt-image-2'
+      body.n = req.n          // schema: 1-4, default 1
+      body.size = size
+      body.resolution = '2k'
+    } else {
+      // nano-banana-pro or nano-banana-2: map to apimart's Google model name
+      const upstreamModel = NANO_BANANA_MODEL_MAP[req.model]
+      body.model = upstreamModel
+      // Pass aspectRatio as size (apimart accepts aspect-ratio strings like '1:1', '16:9')
+      body.size = req.aspectRatio ?? '1:1'
     }
 
     // I2I: materialize asset IDs to signed URLs before forwarding (mirrors apimart_images.py _submit)

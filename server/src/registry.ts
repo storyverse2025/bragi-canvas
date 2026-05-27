@@ -12,8 +12,8 @@ export interface RegistryEntry {
 const REGISTRY: Record<string, RegistryEntry> = {
   // image
   'gpt-image-2':        { provider: 'apimart',     capability: 'image', async: true  },  // confirmed apimart ✓
-  'nano-banana-pro':    { provider: 'fal',         capability: 'image', async: true  },  // apimart: model_not_found → keep fal
-  'nano-banana-2':      { provider: 'fal',         capability: 'image', async: true  },  // apimart: model_not_found → keep fal
+  'nano-banana-pro':    { provider: 'apimart',     capability: 'image', async: true  },  // apimart: gemini-3-pro-image-preview ✓ (fal balance exhausted)
+  'nano-banana-2':      { provider: 'apimart',     capability: 'image', async: true  },  // apimart: gemini-3.1-flash-image-preview ✓ (fal balance exhausted)
   'seedream-4.5':       { provider: 'byteplus',    capability: 'image', async: false },
   'seedream-5.0':       { provider: 'byteplus',    capability: 'image', async: false },
   'grok-imagine':       { provider: 'xai',         capability: 'image', async: false },
@@ -50,8 +50,8 @@ const REGISTRY: Record<string, RegistryEntry> = {
  */
 export const MODEL_PROVIDER_OPTIONS: Record<string, Set<Provider>> = {
   'gpt-image-2':        new Set(['apimart']),
-  'nano-banana-pro':    new Set(['fal']),
-  'nano-banana-2':      new Set(['fal']),
+  'nano-banana-pro':    new Set(['apimart', 'fal']),
+  'nano-banana-2':      new Set(['apimart', 'fal']),
   'seedream-4.5':       new Set(['byteplus']),
   'seedream-5.0':       new Set(['byteplus']),
   'grok-imagine':       new Set(['xai']),

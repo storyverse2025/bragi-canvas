@@ -164,6 +164,67 @@ describe('ApimartAdapter', () => {
     expect(capturedBody.image_urls[0]).toContain('ast_x')
   })
 
+  it('nano-banana-pro maps to gemini-3-pro-image-preview and sends aspectRatio as size', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    const result = await adapter.imageGeneration!({
+      model: 'nano-banana-pro',
+      prompt: 'a red apple',
+      aspectRatio: '16:9',
+    })
+
+    expect(result.status).toBe('queued')
+    expect(result.provider).toBe('apimart')
+    expect(capturedBody.model).toBe('gemini-3-pro-image-preview')
+    expect(capturedBody.size).toBe('16:9')
+    expect(capturedBody.prompt).toBe('a red apple')
+    // gpt-image-2-only fields must not be present
+    expect(capturedBody.resolution).toBeUndefined()
+    expect(capturedBody.n).toBeUndefined()
+  })
+
+  it('nano-banana-2 maps to gemini-3.1-flash-image-preview', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    const result = await adapter.imageGeneration!({
+      model: 'nano-banana-2',
+      prompt: 'a blue ocean',
+      aspectRatio: '1:1',
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.model).toBe('gemini-3.1-flash-image-preview')
+    expect(capturedBody.size).toBe('1:1')
+  })
+
+  it('nano-banana-pro i2i materializes asset IDs to image_urls', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'nano-banana-pro',
+      prompt: 'edit this image',
+      aspectRatio: '4:3',
+      input_assets: ['ast_x'],
+    })
+
+    expect(capturedBody.image_urls).toHaveLength(1)
+    expect(capturedBody.image_urls[0]).toMatch(/^https?:\/\//)
+    expect(capturedBody.image_urls[0]).toContain('ast_x')
+    expect(capturedBody.model).toBe('gemini-3-pro-image-preview')
+  })
+
   it('4xx error maps to provider_invalid_request', async () => {
     nock(BASE)
       .post('/v1/images/generations')
