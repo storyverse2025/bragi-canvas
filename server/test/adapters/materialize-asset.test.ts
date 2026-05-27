@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { storeAsset } from '../../src/assets.js'
 import { materializeAsset } from '../../src/adapters/materialize-asset.js'
+import { ApiError } from '../../src/errors.js'
 
 beforeEach(async () => {
   const dir = await mkdtemp(join(tmpdir(), 'router-mat-'))
@@ -26,5 +27,11 @@ describe('materializeAsset', () => {
   it('returns bytes form', async () => {
     const r = await materializeAsset('ast_a', 'inline-bytes')
     expect(r.bytes?.toString()).toBe('IMG')
+  })
+  it('throws ApiError invalid_request when asset missing', async () => {
+    await expect(materializeAsset('ast_does_not_exist', 'url'))
+      .rejects.toMatchObject({ code: 'invalid_request', httpStatus: 400 })
+    await expect(materializeAsset('ast_does_not_exist', 'url'))
+      .rejects.toBeInstanceOf(ApiError)
   })
 })

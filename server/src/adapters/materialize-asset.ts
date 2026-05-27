@@ -1,5 +1,6 @@
 import { readAsset, signAssetUrl } from '../assets.js'
 import { env } from '../env.js'
+import { ApiError } from '../errors.js'
 
 export type AssetForm = 'url' | 'inline-base64' | 'inline-bytes'
 
@@ -14,7 +15,13 @@ export interface MaterializedAsset {
 export async function materializeAsset(assetId: string, form: AssetForm): Promise<MaterializedAsset> {
   const tmpDir = process.env.ASSET_TMP_DIR ?? env.ASSET_TMP_DIR
   const a = await readAsset(tmpDir, assetId)
-  if (!a) throw new Error(`asset ${assetId} not found`)
+  if (!a) {
+    throw new ApiError(
+      'invalid_request',
+      `reference asset ${assetId} not found or expired`,
+      400,
+    )
+  }
   if (form === 'url') {
     const secret = process.env.ASSET_SIGNING_SECRET ?? env.ASSET_SIGNING_SECRET
     const publicUrl = process.env.ROUTER_PUBLIC_URL ?? env.ROUTER_PUBLIC_URL
