@@ -13,6 +13,7 @@ import { videosRoute } from './routes/videos-generations.js'
 import { audioRoute } from './routes/audio.js'
 import { tasksRoute } from './routes/tasks.js'
 import { requireBragiToken } from './auth.js'
+import { cleanupExpiredAssets } from './assets.js'
 
 const app = new OpenAPIHono()
 app.use('*', cors({
@@ -52,4 +53,20 @@ app.get('/docs', swaggerUI({ url: '/v1/openapi.json' }))
 
 serve({ fetch: app.fetch, port: env.PORT }, info => {
   console.log(JSON.stringify({ level: 'info', msg: 'listening', port: info.port }))
+
+  const tmpDir = env.ASSET_TMP_DIR
+  const ttlSec = env.ASSET_TTL_SECONDS
+  const CLEANUP_INTERVAL_MS = 10 * 60 * 1000 // 10 minutes
+
+  // Run once at startup
+  cleanupExpiredAssets(tmpDir, ttlSec).then(n => {
+    if (n > 0) console.log(JSON.stringify({ level: 'info', msg: 'startup cleanup', removed: n }))
+  }).catch(() => {})
+
+  // Schedule periodic cleanup
+  setInterval(() => {
+    cleanupExpiredAssets(tmpDir, ttlSec).then(n => {
+      if (n > 0) console.log(JSON.stringify({ level: 'info', msg: 'periodic cleanup', removed: n }))
+    }).catch(() => {})
+  }, CLEANUP_INTERVAL_MS).unref()
 })
