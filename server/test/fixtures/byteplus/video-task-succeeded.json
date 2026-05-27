@@ -1,0 +1,11 @@
+{
+  "id": "task-seedance-abc123",
+  "model": "seedance-1-0-pro-250528",
+  "status": "succeeded",
+  "created_at": 1700000000,
+  "content": {
+    "video_url": "https://ark-sg.byteplus.com/bytepluses-video/seedance-result-abc123.mp4",
+    "cover_image_url": "https://ark-sg.byteplus.com/bytepluses-video/seedance-result-abc123-cover.jpg",
+    "duration": 5.0
+  }
+}

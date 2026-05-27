@@ -1,0 +1,13 @@
+{
+  "data": {
+    "task_id": "apimart-task-abc123",
+    "status": "completed",
+    "result": {
+      "images": [
+        {
+          "url": "https://api.apimart.ai/output/gpt-image-result-abc123.png"
+        }
+      ]
+    }
+  }
+}

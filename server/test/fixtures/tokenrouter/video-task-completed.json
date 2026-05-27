@@ -1,0 +1,9 @@
+{
+  "task_id": "tr-video-task-abc123",
+  "status": "completed",
+  "model": "dreamina-seedance-2-0-260128",
+  "metadata": {
+    "url": "https://cdn.tokenrouter.com/videos/seedance-result-abc123.mp4",
+    "duration": 5
+  }
+}

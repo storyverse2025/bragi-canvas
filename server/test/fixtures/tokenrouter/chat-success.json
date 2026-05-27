@@ -1,0 +1,21 @@
+{
+  "id": "chatcmpl-tokenrouter-abc123",
+  "object": "chat.completion",
+  "created": 1700000000,
+  "model": "qwen3-72b",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! I'm Qwen, a helpful AI assistant. How can I help you today?"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 18,
+    "total_tokens": 30
+  }
+}

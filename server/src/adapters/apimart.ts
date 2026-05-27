@@ -1,0 +1,199 @@
+/**
+ * Apimart Adapter — gpt-image-2 + nano-banana proxy
+ *
+ * Supported models:
+ *   Image (async): gpt-image-2, nano-banana-pro, nano-banana-2
+ *
+ * Auth: Bearer ${APIMART_API_KEY}
+ * Base: APIMART_BASE_URL (default https://api.apimart.ai)
+ *
+ * Ground truth: apps/backend/app/core/apimart_images.py
+ *
+ * Flow: POST /v1/images/generations → { data: [{ task_id }] }
+ *       GET  /v1/tasks/{task_id}    → { data: { status, result: { images: [{url}] } } }
+ *
+ * nano-banana model ID mapping (apimart uses Google's model names):
+ *   nano-banana-pro → gemini-3-pro-image-preview   (Gemini-3-Pro-Image-preview)
+ *   nano-banana-2   → gemini-3.1-flash-image-preview (Gemini-3.1-Flash-Image-preview)
+ */
+
+import type { Adapter, AsyncResult, TaskStatusResult } from './types.js'
+import { ApiError, toHttpStatus } from '../errors.js'
+import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
+import { materializeAsset } from './materialize-asset.js'
+
+const APIMART_POLL_AFTER_MS = 5_000
+
+const SUPPORTED_SIZES = new Set([
+  'auto', '1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5',
+  '16:9', '9:16', '21:9', '9:21', '7:9', '9:7',
+])
+
+/**
+ * Map our schema size strings (OpenAI-compatible WxH) to apimart's accepted
+ * aspect-ratio strings (same set used by apimart_images.py).
+ */
+const SIZE_TO_ASPECT_RATIO: Record<string, string> = {
+  '1024x1024': '1:1',
+  '1792x1024': '16:9',
+  '1024x1792': '9:16',
+}
+
+function sizeToAspectRatio(size: string): string {
+  const ar = SIZE_TO_ASPECT_RATIO[size]
+  if (ar && SUPPORTED_SIZES.has(ar)) return ar
+  // fallback: if somehow an unrecognised size arrives, pass 'auto'
+  return 'auto'
+}
+
+/**
+ * Map our canonical model IDs to apimart's upstream model IDs.
+ * apimart uses Google's official model names for nano-banana variants.
+ */
+const NANO_BANANA_MODEL_MAP: Record<string, string> = {
+  'nano-banana-pro': 'gemini-3-pro-image-preview',
+  'nano-banana-2':   'gemini-3.1-flash-image-preview',
+}
+
+export class ApimartAdapter implements Adapter {
+  readonly name = 'apimart'
+
+  private readonly apiKey: string
+  private readonly baseUrl: string
+
+  constructor(config: { apiKey: string; baseUrl: string }) {
+    this.apiKey = config.apiKey
+    this.baseUrl = config.baseUrl.replace(/\/$/, '')
+  }
+
+  private async call(method: 'POST' | 'GET', path: string, body?: unknown): Promise<unknown> {
+    const init: RequestInit = {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    }
+    if (body !== undefined) init.body = JSON.stringify(body)
+
+    let res: Response
+    try {
+      res = await fetch(`${this.baseUrl}${path}`, init)
+    } catch (e: any) {
+      throw new ApiError('provider_unavailable', `apimart network error: ${e?.message ?? e}`, 503, { transport_error: String(e?.message ?? e) })
+    }
+    const text = await res.text()
+    let parsed: any
+    try { parsed = JSON.parse(text) } catch { parsed = text }
+
+    if (!res.ok) {
+      const code = res.status >= 500 ? 'provider_unavailable' : 'provider_invalid_request'
+      const err = parsed?.error ?? {}
+      const message = err.message ?? `Apimart ${res.status}`
+      throw new ApiError(code, typeof message === 'string' ? message : JSON.stringify(message), toHttpStatus(res.status), parsed)
+    }
+    return parsed
+  }
+
+  async imageGeneration(
+    req: Extract<ImagesGenerationsRequest, { model: 'gpt-image-2' | 'nano-banana-pro' | 'nano-banana-2' }>,
+  ): Promise<AsyncResult> {
+    const body: Record<string, unknown> = {
+      prompt: req.prompt,
+    }
+
+    if (req.model === 'gpt-image-2') {
+      // Map schema size ('1024x1024' etc.) → apimart aspect-ratio string ('1:1' etc.)
+      // Mirrors the mapping in apps/backend/app/core/apimart_images.py
+      const size = sizeToAspectRatio(req.size)
+      body.model = 'gpt-image-2'
+      body.n = req.n          // schema: 1-4, default 1
+      body.size = size
+      body.resolution = '2k'
+    } else {
+      // nano-banana-pro or nano-banana-2: map to apimart's Google model name
+      const upstreamModel = NANO_BANANA_MODEL_MAP[req.model]
+      body.model = upstreamModel
+      // Pass aspectRatio as size (apimart accepts aspect-ratio strings like '1:1', '16:9')
+      body.size = req.aspectRatio ?? '1:1'
+    }
+
+    // I2I: materialize asset IDs to signed URLs before forwarding (mirrors apimart_images.py _submit)
+    if (req.input_assets && req.input_assets.length > 0) {
+      const imageUrls = await Promise.all(
+        req.input_assets.map(async (id) => {
+          const m = await materializeAsset(id, 'url')
+          return m.url!
+        })
+      )
+      body.image_urls = imageUrls
+    }
+
+    const r: any = await this.call('POST', '/v1/images/generations', body)
+
+    const items = r.data ?? []
+    const taskId: string = items[0]?.task_id
+    if (!taskId) {
+      throw new ApiError('provider_unavailable', `Apimart returned no task_id: ${JSON.stringify(r)}`, 502, r)
+    }
+
+    return {
+      status: 'queued',
+      provider: 'apimart',
+      provider_task_id: taskId,
+      poll_after_ms: APIMART_POLL_AFTER_MS,
+    }
+  }
+
+  async taskStatus(taskId: string): Promise<TaskStatusResult> {
+    const t0 = Date.now()
+    const r: any = await this.call('GET', `/v1/tasks/${taskId}`)
+
+    // Apimart wraps status under either top-level or `data`
+    const node: any = (r.data && typeof r.data === 'object') ? r.data : r
+    const status: string = (node.status ?? '').toLowerCase()
+
+    if (status === 'completed') {
+      const result = node.result ?? {}
+      const images: Array<any> = result.images ?? []
+      const urlField = images[0]?.url
+      const url = Array.isArray(urlField) ? urlField[0] : urlField
+      if (!url) {
+        return {
+          status: 'failed',
+          error: { code: 'provider_unavailable', message: `Apimart completed but no image URL: ${JSON.stringify(r)}` },
+          latency_ms: Date.now() - t0,
+        }
+      }
+      return {
+        status: 'succeeded',
+        outputs: [{ kind: 'image', url, mime_type: 'image/png' }],
+        latency_ms: Date.now() - t0,
+      }
+    }
+
+    if (status === 'failed') {
+      const err = node.error ?? {}
+      const msg = err.message ?? 'Apimart task failed'
+      // Check if it's a moderation/rejection
+      const isRejected = ['moderation', 'content policy', 'content_policy', 'safety', 'blocked', 'restriction', 'policy violation']
+        .some(kw => msg.toLowerCase().includes(kw))
+      return {
+        status: 'failed',
+        error: {
+          code: isRejected ? 'provider_rejected' : 'provider_unavailable',
+          message: msg,
+          provider_raw: node.error,
+        },
+        latency_ms: Date.now() - t0,
+      }
+    }
+
+    // pending / processing / unknown → still running
+    return {
+      status: 'running',
+      latency_ms: Date.now() - t0,
+      poll_after_ms: APIMART_POLL_AFTER_MS,
+    }
+  }
+}

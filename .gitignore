@@ -5,3 +5,9 @@ dist/
 .DS_Store
 AGENTS.md
 docs/obsidian-review-checklist.md
+
+# router server
+server/.env
+server/tmp/
+server/dist/
+server/node_modules/

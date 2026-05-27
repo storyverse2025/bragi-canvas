@@ -1,0 +1,4 @@
+{
+  "error": "Invalid request: prompt is required",
+  "code": 400
+}

@@ -1,0 +1,17 @@
+[Unit]
+Description=Storyverse Bragi Router
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/bragi-router/current
+EnvironmentFile=/etc/bragi-router/.env
+ExecStart=/usr/bin/node /opt/bragi-router/current/dist/index.js
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

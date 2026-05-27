@@ -1,0 +1,6 @@
+{
+  "id": "luma-task-abc123",
+  "state": "queued",
+  "created_at": "2024-01-01T00:00:00Z",
+  "model": "ray-2"
+}
