@@ -4,7 +4,7 @@ import type { ZodSchema } from 'zod'
 import { AudioSpeechBody } from '../schemas/audio-speech.js'
 import { AudioMusicBody } from '../schemas/audio-music.js'
 import { AudioSfxBody } from '../schemas/audio-sfx.js'
-import { lookupModel } from '../registry.js'
+import { resolveProvider } from '../registry.js'
 import { adapterFor } from '../adapters/index.js'
 import { ApiError, toErrorResponse } from '../errors.js'
 
@@ -133,14 +133,29 @@ const audioSfxRoute = createRoute({
 
 audioRoute.openapi(audioSpeechRoute, async c => {
   const req = c.req.valid('json')
-  const entry = lookupModel(req.model)
-  if (!entry || entry.capability !== 'audio') {
+  const rawBody: any = await c.req.json().catch(() => ({}))
+  const requestedProvider: string | undefined = typeof rawBody?.provider === 'string' ? rawBody.provider : undefined
+
+  let entry: ReturnType<typeof resolveProvider>['entry']
+  let provider: ReturnType<typeof resolveProvider>['provider']
+  try {
+    ;({ entry, provider } = resolveProvider(req.model, requestedProvider))
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
+    throw e
+  }
+
+  if (entry.capability !== 'audio') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for audio`, 400))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return c.json(body, status) as any
   }
   try {
-    const a = adapterFor(entry.provider)
+    const a = adapterFor(provider)
     if (!a.audioSpeech) throw new ApiError('internal_error', `adapter missing audioSpeech`, 500)
     const r = await a.audioSpeech(req)
     if ('bytes' in r) {
@@ -161,14 +176,29 @@ audioRoute.openapi(audioSpeechRoute, async c => {
 
 audioRoute.openapi(audioMusicRoute, async c => {
   const req = c.req.valid('json')
-  const entry = lookupModel(req.model)
-  if (!entry || entry.capability !== 'audio') {
+  const rawBody: any = await c.req.json().catch(() => ({}))
+  const requestedProvider: string | undefined = typeof rawBody?.provider === 'string' ? rawBody.provider : undefined
+
+  let entry: ReturnType<typeof resolveProvider>['entry']
+  let provider: ReturnType<typeof resolveProvider>['provider']
+  try {
+    ;({ entry, provider } = resolveProvider(req.model, requestedProvider))
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
+    throw e
+  }
+
+  if (entry.capability !== 'audio') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for audio`, 400))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return c.json(body, status) as any
   }
   try {
-    const a = adapterFor(entry.provider)
+    const a = adapterFor(provider)
     if (!a.audioMusic) throw new ApiError('internal_error', `adapter missing audioMusic`, 500)
     const r = await a.audioMusic(req)
     return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
@@ -184,14 +214,29 @@ audioRoute.openapi(audioMusicRoute, async c => {
 
 audioRoute.openapi(audioSfxRoute, async c => {
   const req = c.req.valid('json')
-  const entry = lookupModel(req.model)
-  if (!entry || entry.capability !== 'audio') {
+  const rawBody: any = await c.req.json().catch(() => ({}))
+  const requestedProvider: string | undefined = typeof rawBody?.provider === 'string' ? rawBody.provider : undefined
+
+  let entry: ReturnType<typeof resolveProvider>['entry']
+  let provider: ReturnType<typeof resolveProvider>['provider']
+  try {
+    ;({ entry, provider } = resolveProvider(req.model, requestedProvider))
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
+    throw e
+  }
+
+  if (entry.capability !== 'audio') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for audio`, 400))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return c.json(body, status) as any
   }
   try {
-    const a = adapterFor(entry.provider)
+    const a = adapterFor(provider)
     if (!a.audioSfx) throw new ApiError('internal_error', `adapter missing audioSfx`, 500)
     const r = await a.audioSfx(req)
     return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)

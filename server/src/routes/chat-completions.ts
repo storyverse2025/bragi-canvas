@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
 import { z } from 'zod'
 import { ChatCompletionsBody } from '../schemas/chat-completions.js'
-import { lookupModel } from '../registry.js'
+import { resolveProvider } from '../registry.js'
 import { adapterFor } from '../adapters/index.js'
 import { ApiError, toErrorResponse } from '../errors.js'
 
@@ -18,7 +18,7 @@ const chatCompletionsRoute = createRoute({
   method: 'post',
   path: '/chat/completions',
   tags: ['chat'],
-  summary: 'Generate a chat completion (OpenAI-compatible)',
+  summary: 'Generate a chat completion (OpenAI-compatible). Optional top-level "provider" field overrides default routing.',
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -43,17 +43,32 @@ const chatCompletionsRoute = createRoute({
 })
 
 chatRoute.openapi(chatCompletionsRoute, async c => {
-  // Re-parse for type safety (openapi already validated, but req.json() for handler convenience)
   const req = c.req.valid('json')
-  const entry = lookupModel(req.model)
-  if (!entry || entry.capability !== 'text') {
+  // Read optional provider override from raw body (Zod strips unknown keys)
+  const rawBody: any = await c.req.json().catch(() => ({}))
+  const requestedProvider: string | undefined = typeof rawBody?.provider === 'string' ? rawBody.provider : undefined
+
+  let entry: ReturnType<typeof resolveProvider>['entry']
+  let provider: ReturnType<typeof resolveProvider>['provider']
+  try {
+    ;({ entry, provider } = resolveProvider(req.model, requestedProvider))
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const { status, body } = toErrorResponse(e)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return c.json(body, status) as any
+    }
+    throw e
+  }
+
+  if (entry.capability !== 'text') {
     const { status, body } = toErrorResponse(new ApiError('unknown_model', `model ${req.model} unsupported for chat`, 400))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return c.json(body, status) as any
   }
   try {
-    const a = adapterFor(entry.provider)
-    if (!a.chatCompletion) throw new ApiError('internal_error', `adapter ${entry.provider} missing chatCompletion`, 500)
+    const a = adapterFor(provider)
+    if (!a.chatCompletion) throw new ApiError('internal_error', `adapter ${provider} missing chatCompletion`, 500)
     const r = await a.chatCompletion(req)
     return c.json({
       id: `chatcmpl_${Date.now().toString(36)}`,
