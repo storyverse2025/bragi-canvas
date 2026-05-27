@@ -229,6 +229,22 @@ describe('TokenrouterAdapter taskStatus', () => {
     expect(result.status).toBe('running')
   })
 
+  it('in_progress status returns running (observed live status value)', async () => {
+    nock(BASE)
+      .get('/v1/videos/tr-video-task-abc123')
+      .reply(200, {
+        task_id: 'tr-video-task-abc123',
+        status: 'in_progress',
+        progress: 50,
+        model: 'dreamina-seedance-2-0-260128',
+        metadata: { url: '' },
+      })
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.taskStatus!('tr-video-task-abc123')
+    expect(result.status).toBe('running')
+  })
+
   it('completed status returns succeeded with video URL', async () => {
     nock(BASE)
       .get('/v1/videos/tr-video-task-abc123')

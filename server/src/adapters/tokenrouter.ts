@@ -175,7 +175,7 @@ export class TokenrouterAdapter implements Adapter {
       }
     }
 
-    if (status === 'pending' || status === 'running') {
+    if (status === 'pending' || status === 'running' || status === 'in_progress') {
       return { status: 'running', latency_ms: Date.now() - t0, poll_after_ms: SEEDANCE_POLL_AFTER_MS }
     }
 
