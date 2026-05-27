@@ -3,7 +3,9 @@ import { z } from 'zod'
 import { VideosGenerationsBody } from '../schemas/videos-generations.js'
 import { resolveProvider } from '../registry.js'
 import { adapterFor } from '../adapters/index.js'
+import { encodeTaskId } from '../adapters/task-id.js'
 import { ApiError, toErrorResponse } from '../errors.js'
+import { env } from '../env.js'
 
 export const videosRoute = new OpenAPIHono({
   defaultHook: (result, c) => {
@@ -78,7 +80,9 @@ videosRoute.openapi(videosGenerationsRoute, async c => {
     const a = adapterFor(provider)
     if (!a.videoGeneration) throw new ApiError('internal_error', `adapter missing videoGeneration`, 500)
     const r = await a.videoGeneration(req)
-    return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
+    const encodedTaskId = encodeTaskId(r.provider_task_id)
+    const pollUrl = `${env.ROUTER_PUBLIC_URL}/v1/tasks/${r.provider}/${encodedTaskId}`
+    return c.json({ task_id: encodedTaskId, provider: r.provider, poll_after_ms: r.poll_after_ms, poll_url: pollUrl }, 202)
   } catch (e) {
     if (e instanceof ApiError) {
       const { status, body } = toErrorResponse(e)

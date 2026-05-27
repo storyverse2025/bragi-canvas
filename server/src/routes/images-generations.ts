@@ -3,7 +3,9 @@ import { z } from 'zod'
 import { ImagesGenerationsBody } from '../schemas/images-generations.js'
 import { resolveProvider } from '../registry.js'
 import { adapterFor } from '../adapters/index.js'
+import { encodeTaskId } from '../adapters/task-id.js'
 import { ApiError, toErrorResponse } from '../errors.js'
+import { env } from '../env.js'
 
 export const imagesRoute = new OpenAPIHono({
   defaultHook: (result, c) => {
@@ -75,7 +77,9 @@ imagesRoute.openapi(imagesGenerationsRoute, async c => {
     if (!a.imageGeneration) throw new ApiError('internal_error', `adapter missing imageGeneration`, 500)
     const r = await a.imageGeneration(req)
     if (r.status === 'queued') {
-      return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
+      const encodedTaskId = encodeTaskId(r.provider_task_id)
+      const pollUrl = `${env.ROUTER_PUBLIC_URL}/v1/tasks/${r.provider}/${encodedTaskId}`
+      return c.json({ task_id: encodedTaskId, provider: r.provider, poll_after_ms: r.poll_after_ms, poll_url: pollUrl }, 202)
     }
     return c.json({
       created: Math.floor(Date.now() / 1000),

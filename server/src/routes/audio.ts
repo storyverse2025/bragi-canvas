@@ -6,7 +6,9 @@ import { AudioMusicBody } from '../schemas/audio-music.js'
 import { AudioSfxBody } from '../schemas/audio-sfx.js'
 import { resolveProvider } from '../registry.js'
 import { adapterFor } from '../adapters/index.js'
+import { encodeTaskId } from '../adapters/task-id.js'
 import { ApiError, toErrorResponse } from '../errors.js'
+import { env } from '../env.js'
 
 export const audioRoute = new OpenAPIHono({
   defaultHook: (result, c) => {
@@ -163,7 +165,9 @@ audioRoute.openapi(audioSpeechRoute, async c => {
       return new Response(new Uint8Array(r.bytes), { headers: { 'Content-Type': r.mimeType } }) as any
     }
     // AsyncResult
-    return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
+    const encodedTaskId = encodeTaskId(r.provider_task_id)
+    const pollUrl = `${env.ROUTER_PUBLIC_URL}/v1/tasks/${r.provider}/${encodedTaskId}`
+    return c.json({ task_id: encodedTaskId, provider: r.provider, poll_after_ms: r.poll_after_ms, poll_url: pollUrl }, 202)
   } catch (e) {
     if (e instanceof ApiError) {
       const { status, body } = toErrorResponse(e)
@@ -201,7 +205,9 @@ audioRoute.openapi(audioMusicRoute, async c => {
     const a = adapterFor(provider)
     if (!a.audioMusic) throw new ApiError('internal_error', `adapter missing audioMusic`, 500)
     const r = await a.audioMusic(req)
-    return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
+    const encodedTaskIdMusic = encodeTaskId(r.provider_task_id)
+    const pollUrlMusic = `${env.ROUTER_PUBLIC_URL}/v1/tasks/${r.provider}/${encodedTaskIdMusic}`
+    return c.json({ task_id: encodedTaskIdMusic, provider: r.provider, poll_after_ms: r.poll_after_ms, poll_url: pollUrlMusic }, 202)
   } catch (e) {
     if (e instanceof ApiError) {
       const { status, body } = toErrorResponse(e)
@@ -239,7 +245,9 @@ audioRoute.openapi(audioSfxRoute, async c => {
     const a = adapterFor(provider)
     if (!a.audioSfx) throw new ApiError('internal_error', `adapter missing audioSfx`, 500)
     const r = await a.audioSfx(req)
-    return c.json({ task_id: r.provider_task_id, provider: r.provider, poll_after_ms: r.poll_after_ms }, 202)
+    const encodedTaskIdSfx = encodeTaskId(r.provider_task_id)
+    const pollUrlSfx = `${env.ROUTER_PUBLIC_URL}/v1/tasks/${r.provider}/${encodedTaskIdSfx}`
+    return c.json({ task_id: encodedTaskIdSfx, provider: r.provider, poll_after_ms: r.poll_after_ms, poll_url: pollUrlSfx }, 202)
   } catch (e) {
     if (e instanceof ApiError) {
       const { status, body } = toErrorResponse(e)

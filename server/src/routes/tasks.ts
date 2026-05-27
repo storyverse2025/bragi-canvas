@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
 import { z } from 'zod'
 import { adapterFor } from '../adapters/index.js'
+import { decodeTaskId } from '../adapters/task-id.js'
 import { ApiError, toErrorResponse } from '../errors.js'
 import type { Provider } from '../registry.js'
 
@@ -29,7 +30,7 @@ const tasksGetRoute = createRoute({
   request: {
     params: z.object({
       provider: z.string().openapi({ description: 'Provider name (e.g. fal, luma, byteplus)' }),
-      task_id: z.string().openapi({ description: 'Provider task ID' }),
+      task_id: z.string().openapi({ description: 'Provider task ID (base64url-encoded opaque string as returned by the generation endpoint)' }),
     }),
   },
   responses: {
@@ -54,7 +55,7 @@ const tasksGetRoute = createRoute({
 
 tasksRoute.openapi(tasksGetRoute, async c => {
   const provider = c.req.param('provider') as Provider
-  const taskId = c.req.param('task_id')
+  const encodedTaskId = c.req.param('task_id')
   if (!ASYNC_PROVIDERS.has(provider)) {
     const knownSyncOnly = new Set(['openai'])
     const message = knownSyncOnly.has(provider)
@@ -64,10 +65,19 @@ tasksRoute.openapi(tasksGetRoute, async c => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return c.json(body, status) as any
   }
+  // Decode the base64url task ID back to the raw provider value
+  let rawTaskId: string
+  try {
+    rawTaskId = decodeTaskId(encodedTaskId)
+  } catch {
+    const { status, body } = toErrorResponse(new ApiError('invalid_request', 'invalid task_id (expected base64url)', 400))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return c.json(body, status) as any
+  }
   try {
     const a = adapterFor(provider)
     if (!a.taskStatus) throw new ApiError('invalid_request', `provider ${provider} does not support task polling`, 400)
-    const r = await a.taskStatus(taskId)
+    const r = await a.taskStatus(rawTaskId)
     return c.json(r)
   } catch (e) {
     if (e instanceof ApiError) {

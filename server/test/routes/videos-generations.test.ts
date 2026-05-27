@@ -23,8 +23,15 @@ describe('POST /v1/videos/generations', () => {
     expect(res.status).toBe(202)
     const body = await res.json()
     expect(body.task_id).toBeDefined()
+    // task_id must be base64url-safe (no slashes or plusses that would break URL routing)
+    expect(body.task_id).not.toContain('/')
+    expect(body.task_id).not.toContain('+')
     expect(body.provider).toBe('fal')
     expect(body.poll_after_ms).toBeDefined()
+    // poll_url must be present and contain the encoded task_id
+    expect(body.poll_url).toBeDefined()
+    expect(body.poll_url).toContain(body.task_id)
+    expect(body.poll_url).toContain('/v1/tasks/fal/')
   })
 
   it('rejects unknown model with 400', async () => {
