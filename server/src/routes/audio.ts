@@ -65,7 +65,7 @@ const audioMusicRoute = createRoute({
   method: 'post',
   path: '/audio/music',
   tags: ['audio'],
-  summary: 'Music generation (async)',
+  summary: 'Music generation (sync bytes or async)',
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -74,8 +74,14 @@ const audioMusicRoute = createRoute({
     },
   },
   responses: {
+    200: {
+      description: 'Generated music audio bytes (sync — elevenlabs native)',
+      content: {
+        'audio/mpeg': { schema: { type: 'string', format: 'binary' } as unknown as ZodSchema },
+      },
+    },
     202: {
-      description: 'Music generation queued',
+      description: 'Music generation queued (async — fal)',
       content: { 'application/json': { schema: z.any() } },
     },
     400: {
@@ -211,6 +217,12 @@ audioRoute.openapi(audioMusicRoute, async c => {
     const a = adapterFor(provider)
     if (!a.audioMusic) throw new ApiError('internal_error', `adapter missing audioMusic`, 500)
     const r = await a.audioMusic(req)
+    if ('bytes' in r) {
+      // Sync result (e.g. elevenlabs native) — return bytes immediately
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return new Response(new Uint8Array(r.bytes), { headers: { 'Content-Type': r.mimeType } }) as any
+    }
+    // AsyncResult (e.g. fal queue)
     const encodedTaskIdMusic = encodeTaskId(r.provider_task_id)
     const pollUrlMusic = `${env.ROUTER_PUBLIC_URL}/v1/tasks/${r.provider}/${encodedTaskIdMusic}`
     return c.json({ task_id: encodedTaskIdMusic, provider: r.provider, poll_after_ms: r.poll_after_ms, poll_url: pollUrlMusic }, 202)

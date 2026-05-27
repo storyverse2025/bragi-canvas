@@ -28,6 +28,7 @@ import type { Adapter } from './types.js'
 import { ApiError, toHttpStatus } from '../errors.js'
 import type { AudioSfxRequest } from '../schemas/audio-sfx.js'
 import type { AudioSpeechRequest } from '../schemas/audio-speech.js'
+import type { AudioMusicRequest } from '../schemas/audio-music.js'
 
 const BASE = 'https://api.elevenlabs.io'
 
@@ -136,6 +137,39 @@ export class ElevenLabsAdapter implements Adapter {
       body,
       { output_format: outputFormat },
     )
+
+    return {
+      status: 'succeeded',
+      bytes,
+      mimeType,
+      provider: 'elevenlabs',
+      model: req.model,
+      latency_ms: Date.now() - t0,
+    }
+  }
+
+  /**
+   * Music: POST /v1/music
+   *
+   * Returns sync audio bytes. Requires a paid ElevenLabs plan (402 on free tier).
+   * music_length_ms: desired duration in ms (1000–180000).
+   * instrumental: if true, no vocals.
+   */
+  async audioMusic(
+    req: Extract<AudioMusicRequest, { model: 'elevenlabs-music' }>,
+  ): Promise<{ status: 'succeeded'; bytes: Buffer; mimeType: string; latency_ms: number; provider: string; model: string }> {
+    const t0 = Date.now()
+
+    const body: Record<string, unknown> = {
+      prompt: req.prompt,
+      music_length_ms: req.duration_ms,
+      model_id: 'music_v1',
+    }
+    if (req.instrumental) {
+      body.instrumental = true
+    }
+
+    const { bytes, mimeType } = await this.callBinary('/v1/music', body)
 
     return {
       status: 'succeeded',

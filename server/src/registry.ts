@@ -36,11 +36,11 @@ const REGISTRY: Record<string, RegistryEntry> = {
   'gpt-5.4-pro':        { provider: 'tokenrouter', capability: 'text', async: false },
   'qwen-3-6-plus':      { provider: 'tokenrouter', capability: 'text', async: false },
 
-  // audio — elevenlabs-tts-v3 + elevenlabs-sfx → direct ElevenLabs (verified 2026-05-27: free tier OK from sv-dev)
-  //         elevenlabs-music → fal (402 paid-plan required on free tier, keep on fal)
+  // audio — all elevenlabs models → direct ElevenLabs native (paid key confirmed 2026-05-27)
+  //         elevenlabs-music: paid plan required (200 bytes confirmed with new key)
   'grok-tts':           { provider: 'xai',         capability: 'audio', async: false },
   'elevenlabs-tts-v3':  { provider: 'elevenlabs',  capability: 'audio', async: false },
-  'elevenlabs-music':   { provider: 'fal',          capability: 'audio', async: true  },
+  'elevenlabs-music':   { provider: 'elevenlabs',  capability: 'audio', async: false },
   'elevenlabs-sfx':     { provider: 'elevenlabs',  capability: 'audio', async: false },
 }
 
@@ -72,7 +72,7 @@ export const MODEL_PROVIDER_OPTIONS: Record<string, Set<Provider>> = {
   'qwen-3-6-plus':      new Set(['tokenrouter']),
   'grok-tts':           new Set(['xai']),
   'elevenlabs-tts-v3':  new Set(['elevenlabs', 'fal']),
-  'elevenlabs-music':   new Set(['fal']),
+  'elevenlabs-music':   new Set(['elevenlabs', 'fal']),
   'elevenlabs-sfx':     new Set(['elevenlabs', 'fal']),
 }
 

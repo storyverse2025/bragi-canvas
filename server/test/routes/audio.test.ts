@@ -32,20 +32,19 @@ describe('POST /v1/audio/speech', () => {
     expect(res.headers.get('Content-Type')).toContain('audio/mpeg')
   })
 
-  it('routes to fal adapter for elevenlabs-music and returns 202', async () => {
-    process.env.FAL_API_KEY = 'fal-test'
-    nock('https://queue.fal.run')
-      .post('/fal-ai/elevenlabs/music')
-      .reply(200, { request_id: 'music-req-123' })
+  it('elevenlabs-music routes to elevenlabs adapter native and returns 200 bytes', async () => {
+    process.env.ELEVENLABS_API_KEY = 'el-test-key'
+    const audioBytes = Buffer.from('fake-music-audio')
+    nock('https://api.elevenlabs.io')
+      .post('/v1/music')
+      .reply(200, audioBytes, { 'Content-Type': 'audio/mpeg' })
     const res = await buildApp().request('/v1/audio/music', {
       method: 'POST',
       headers: { Authorization: 'Bearer svsk-test-1', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'elevenlabs-music', prompt: 'upbeat jazz' }),
+      body: JSON.stringify({ model: 'elevenlabs-music', prompt: 'upbeat jazz', duration_ms: 5000, instrumental: false }),
     })
-    expect(res.status).toBe(202)
-    const body = await res.json()
-    expect(body.task_id).toBeDefined()
-    expect(body.provider).toBe('fal')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toContain('audio/mpeg')
   })
 
   it('rejects unknown model with 400', async () => {
