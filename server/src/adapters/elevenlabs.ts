@@ -41,6 +41,62 @@ const DEFAULT_OUTPUT_FORMAT = 'mp3_44100_128'
  */
 const DEFAULT_VOICE_ID = 'pNInz6obpgDQGcFmaJgB'
 
+/**
+ * Map of friendly voice names → ElevenLabs premade voice IDs.
+ * Keys are lower-cased for case-insensitive lookup.
+ *
+ * ElevenLabs premade voices (free-tier accessible):
+ *   https://elevenlabs.io/docs/voices/premade-voices
+ *
+ * OpenAI-style aliases are mapped to phonetically similar premade voices so
+ * callers that reuse OpenAI voice names are not broken.
+ */
+const VOICE_NAME_MAP: Record<string, string> = {
+  // ElevenLabs native premade names
+  adam:    'pNInz6obpgDQGcFmaJgB',
+  rachel:  '21m00Tcm4TlvDq8ikWAM',
+  antoni:  'ErXwobaYiN019PkySvjV',
+  bella:   'EXAVITQu4vr4xnSDxMaL',
+  josh:    'TxGEqnHWrfWFTfGW9XjX',
+  arnold:  'VR6AewLTigWG4xSOukaG',
+  domi:    'AZnzlk1XvdvUeBnXmlld',
+  elli:    'MF3mGyEYCl7XYWbV9V6O',
+  // OpenAI-style aliases → closest premade voice
+  alloy:   'pNInz6obpgDQGcFmaJgB', // Adam  (neutral male)
+  echo:    'ErXwobaYiN019PkySvjV',  // Antoni (male)
+  onyx:    'VR6AewLTigWG4xSOukaG',  // Arnold (deep male)
+  nova:    'EXAVITQu4vr4xnSDxMaL',  // Bella  (female)
+  shimmer: '21m00Tcm4TlvDq8ikWAM',  // Rachel (female)
+  fable:   'MF3mGyEYCl7XYWbV9V6O',  // Elli   (female)
+}
+
+/**
+ * Resolve a caller-supplied voice value to a valid ElevenLabs voice_id.
+ *
+ * Resolution order:
+ *  1. Empty / undefined → DEFAULT_VOICE_ID (Adam)
+ *  2. Matches VOICE_NAME_MAP (case-insensitive) → mapped voice_id
+ *  3. Looks like a raw ElevenLabs voice_id (10-24 alphanumeric chars) → pass through
+ *  4. Unknown → warn and fall back to DEFAULT_VOICE_ID (Adam) rather than erroring
+ */
+function resolveVoiceId(voice: string | undefined): string {
+  if (!voice) return DEFAULT_VOICE_ID
+
+  const lower = voice.toLowerCase()
+  const mapped = VOICE_NAME_MAP[lower]
+  if (mapped) return mapped
+
+  // Raw voice_id heuristic: ElevenLabs IDs are ~20 alphanumeric chars
+  if (/^[A-Za-z0-9]{10,24}$/.test(voice)) return voice
+
+  // Unknown name — fall back gracefully
+  console.warn(
+    `[elevenlabs] Unknown voice name "${voice}"; falling back to default voice (Adam). ` +
+    `Valid friendly names: ${Object.keys(VOICE_NAME_MAP).join(', ')}`,
+  )
+  return DEFAULT_VOICE_ID
+}
+
 export class ElevenLabsAdapter implements Adapter {
   readonly name = 'elevenlabs'
 
@@ -123,7 +179,7 @@ export class ElevenLabsAdapter implements Adapter {
   ): Promise<{ status: 'succeeded'; bytes: Buffer; mimeType: string; latency_ms: number; provider: string; model: string }> {
     const t0 = Date.now()
 
-    const voiceId = req.voice || DEFAULT_VOICE_ID
+    const voiceId = resolveVoiceId(req.voice)
     const outputFormat = req.response_format === 'wav' ? 'pcm_44100' : DEFAULT_OUTPUT_FORMAT
 
     const body: Record<string, unknown> = {

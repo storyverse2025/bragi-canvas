@@ -182,6 +182,114 @@ describe('ElevenLabsAdapter', () => {
       expect(capturedBody.apply_text_normalization).toBe('auto')
     })
 
+    it('resolves friendly name "adam" to voice_id pNInz6obpgDQGcFmaJgB', async () => {
+      nock(BASE)
+        .post('/v1/text-to-speech/pNInz6obpgDQGcFmaJgB')
+        .query(true)
+        .reply(200, FAKE_AUDIO, { 'Content-Type': 'audio/mpeg' })
+
+      const adapter = new ElevenLabsAdapter('el-test-key')
+      const result = await adapter.audioSpeech!({
+        model: 'elevenlabs-tts-v3',
+        input: 'Hello',
+        voice: 'adam',
+        response_format: 'mp3',
+      })
+
+      if (!('bytes' in result)) throw new Error('expected sync bytes result')
+      expect(result.status).toBe('succeeded')
+    })
+
+    it('resolves friendly name "Rachel" (case-insensitive) to voice_id 21m00Tcm4TlvDq8ikWAM', async () => {
+      nock(BASE)
+        .post('/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM')
+        .query(true)
+        .reply(200, FAKE_AUDIO, { 'Content-Type': 'audio/mpeg' })
+
+      const adapter = new ElevenLabsAdapter('el-test-key')
+      const result = await adapter.audioSpeech!({
+        model: 'elevenlabs-tts-v3',
+        input: 'Hello',
+        voice: 'Rachel',
+        response_format: 'mp3',
+      })
+
+      if (!('bytes' in result)) throw new Error('expected sync bytes result')
+      expect(result.status).toBe('succeeded')
+    })
+
+    it('maps OpenAI-style alias "alloy" to Adam voice_id', async () => {
+      nock(BASE)
+        .post('/v1/text-to-speech/pNInz6obpgDQGcFmaJgB')
+        .query(true)
+        .reply(200, FAKE_AUDIO, { 'Content-Type': 'audio/mpeg' })
+
+      const adapter = new ElevenLabsAdapter('el-test-key')
+      const result = await adapter.audioSpeech!({
+        model: 'elevenlabs-tts-v3',
+        input: 'Hello',
+        voice: 'alloy',
+        response_format: 'mp3',
+      })
+
+      if (!('bytes' in result)) throw new Error('expected sync bytes result')
+      expect(result.status).toBe('succeeded')
+    })
+
+    it('passes a raw voice_id through unchanged', async () => {
+      nock(BASE)
+        .post('/v1/text-to-speech/CwhRBWXzGAHq8TQ4Fs17')
+        .query(true)
+        .reply(200, FAKE_AUDIO, { 'Content-Type': 'audio/mpeg' })
+
+      const adapter = new ElevenLabsAdapter('el-test-key')
+      const result = await adapter.audioSpeech!({
+        model: 'elevenlabs-tts-v3',
+        input: 'Hello',
+        voice: 'CwhRBWXzGAHq8TQ4Fs17',
+        response_format: 'mp3',
+      })
+
+      if (!('bytes' in result)) throw new Error('expected sync bytes result')
+      expect(result.status).toBe('succeeded')
+    })
+
+    it('unknown voice name falls back to default Adam voice_id', async () => {
+      nock(BASE)
+        .post('/v1/text-to-speech/pNInz6obpgDQGcFmaJgB')
+        .query(true)
+        .reply(200, FAKE_AUDIO, { 'Content-Type': 'audio/mpeg' })
+
+      const adapter = new ElevenLabsAdapter('el-test-key')
+      const result = await adapter.audioSpeech!({
+        model: 'elevenlabs-tts-v3',
+        input: 'Hello',
+        voice: 'xyz-not-real',
+        response_format: 'mp3',
+      })
+
+      if (!('bytes' in result)) throw new Error('expected sync bytes result')
+      expect(result.status).toBe('succeeded')
+    })
+
+    it('empty voice falls back to default Adam voice_id', async () => {
+      nock(BASE)
+        .post('/v1/text-to-speech/pNInz6obpgDQGcFmaJgB')
+        .query(true)
+        .reply(200, FAKE_AUDIO, { 'Content-Type': 'audio/mpeg' })
+
+      const adapter = new ElevenLabsAdapter('el-test-key')
+      const result = await adapter.audioSpeech!({
+        model: 'elevenlabs-tts-v3',
+        input: 'Hello',
+        voice: '',
+        response_format: 'mp3',
+      })
+
+      if (!('bytes' in result)) throw new Error('expected sync bytes result')
+      expect(result.status).toBe('succeeded')
+    })
+
     it('402 paid plan voice maps to provider_invalid_request', async () => {
       nock(BASE)
         .post('/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM')
