@@ -5,16 +5,17 @@ import { ApiError, toErrorResponse } from '../errors.js'
 import type { Provider } from '../registry.js'
 
 // Providers that have async task workflows (implement taskStatus())
-// Sync-only providers (openai, tokenrouter) are intentionally excluded.
 // Note: xai now supports async via grok-video (POST /v1/videos/generations, poll /v1/videos/{id})
+// Note: tokenrouter now supports async via seedance (POST /v1/videos, poll /v1/videos/{id})
 const ASYNC_PROVIDERS = new Set<Provider>([
-  'gemini',     // Veo video
-  'byteplus',   // Seedance video
-  'fal',        // Kling, ElevenLabs, nano-banana
-  'luma',       // video
-  'legnext',    // Midjourney (returns 501 in V1)
-  'apimart',    // gpt-image-2
-  'xai',        // grok-video (native video API)
+  'gemini',       // Veo video
+  'byteplus',     // Seedance video (fallback)
+  'fal',          // Kling, ElevenLabs, nano-banana
+  'luma',         // video
+  'legnext',      // Midjourney (returns 501 in V1)
+  'apimart',      // gpt-image-2
+  'xai',          // grok-video (native video API)
+  'tokenrouter',  // seedance-2.0/-fast via OpenAI Videos API
 ])
 
 export const tasksRoute = new OpenAPIHono()
@@ -55,7 +56,7 @@ tasksRoute.openapi(tasksGetRoute, async c => {
   const provider = c.req.param('provider') as Provider
   const taskId = c.req.param('task_id')
   if (!ASYNC_PROVIDERS.has(provider)) {
-    const knownSyncOnly = new Set(['openai', 'tokenrouter'])
+    const knownSyncOnly = new Set(['openai'])
     const message = knownSyncOnly.has(provider)
       ? `provider ${provider} does not support task polling (sync-only)`
       : `unknown provider ${provider}`

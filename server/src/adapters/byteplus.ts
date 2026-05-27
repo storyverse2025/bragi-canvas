@@ -144,12 +144,16 @@ export class ByteplusAdapter implements Adapter {
       n: req.n ?? 1,  // schema: 1-4, default 1
     }
 
-    // I2I: materialize input_assets as inline-base64 and pass as image field (mirrors team volcengine_images.py)
+    // I2I: pass image as a signed public URL so Volcengine can fetch it.
+    // Volcengine's seedream `image` field requires a fetchable URL — raw base64
+    // causes "invalid url specified" (confirmed by Zhizhuo's test 2026-05-27).
+    // Signed asset URLs are publicly accessible (ROUTER_PUBLIC_URL is HTTPS).
+    // This mirrors how seedance (same Volcengine) passes image_url references.
     if (req.input_assets && req.input_assets.length > 0) {
       const resolved = await Promise.all(
         req.input_assets.map(async (id) => {
-          const m = await materializeAsset(id, 'inline-base64')
-          return m.base64 as string
+          const m = await materializeAsset(id, 'url')
+          return m.url as string
         })
       )
       body.image = resolved.length === 1 ? resolved[0] : resolved

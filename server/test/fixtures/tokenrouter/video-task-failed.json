@@ -1,0 +1,8 @@
+{
+  "task_id": "tr-video-task-abc123",
+  "status": "failed",
+  "model": "dreamina-seedance-2-0-260128",
+  "error": {
+    "message": "Content policy violation"
+  }
+}

@@ -150,7 +150,8 @@ describe('ByteplusAdapter', () => {
     ).rejects.toMatchObject({ code: 'provider_invalid_request' })
   })
 
-  it('imageGeneration with single input_asset sends image as base64 string', async () => {
+  it('imageGeneration with single input_asset sends image as signed URL (not base64)', async () => {
+    // Volcengine seedream requires a fetchable URL, not raw base64 (bug confirmed 2026-05-27)
     let capturedBody: any
     nock(BASE)
       .post('/api/v3/images/generations', (body) => { capturedBody = body; return true })
@@ -167,10 +168,12 @@ describe('ByteplusAdapter', () => {
 
     expect(result.status).toBe('succeeded')
     expect(typeof capturedBody.image).toBe('string')
-    expect(capturedBody.image).toBe(Buffer.from('IMGDATA1').toString('base64'))
+    // Should be a signed https URL, not raw base64
+    expect(capturedBody.image).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1\?expires=/)
+    expect(capturedBody.image).not.toBe(Buffer.from('IMGDATA1').toString('base64'))
   })
 
-  it('imageGeneration with two input_assets sends image as base64 array', async () => {
+  it('imageGeneration with two input_assets sends image as signed URL array', async () => {
     let capturedBody: any
     nock(BASE)
       .post('/api/v3/images/generations', (body) => { capturedBody = body; return true })
@@ -187,10 +190,8 @@ describe('ByteplusAdapter', () => {
 
     expect(result.status).toBe('succeeded')
     expect(Array.isArray(capturedBody.image)).toBe(true)
-    expect(capturedBody.image).toEqual([
-      Buffer.from('IMGDATA1').toString('base64'),
-      Buffer.from('IMGDATA2').toString('base64'),
-    ])
+    expect(capturedBody.image[0]).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1\?expires=/)
+    expect(capturedBody.image[1]).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img2\?expires=/)
   })
 
   it('imageGeneration passes n from request to upstream — not hardcoded', async () => {

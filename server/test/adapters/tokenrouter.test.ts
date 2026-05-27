@@ -1,10 +1,26 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import nock from 'nock'
 import chatFx from '../fixtures/tokenrouter/chat-success.json' with { type: 'json' }
 import errorFx from '../fixtures/tokenrouter/error-400.json' with { type: 'json' }
+import videoCreatedFx from '../fixtures/tokenrouter/video-task-created.json' with { type: 'json' }
+import videoRunningFx from '../fixtures/tokenrouter/video-task-running.json' with { type: 'json' }
+import videoCompletedFx from '../fixtures/tokenrouter/video-task-completed.json' with { type: 'json' }
+import videoFailedFx from '../fixtures/tokenrouter/video-task-failed.json' with { type: 'json' }
 import { TokenrouterAdapter } from '../../src/adapters/tokenrouter.js'
+import { storeAsset } from '../../src/assets.js'
 
 const BASE = 'https://api.tokenrouter.com'
+
+beforeEach(async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'router-tokenrouter-'))
+  process.env.ASSET_TMP_DIR = dir
+  process.env.ASSET_SIGNING_SECRET = '0123456789abcdef0123456789abcdef'
+  process.env.ROUTER_PUBLIC_URL = 'https://router.test'
+  await storeAsset(dir, 'ast_img1', Buffer.from('IMGDATA1'), 'image/png')
+})
 
 afterEach(() => {
   nock.cleanAll()
@@ -108,6 +124,142 @@ describe('TokenrouterAdapter', () => {
         model: 'qwen-3-6-plus',
         messages: [{ role: 'user', content: 'hi' }],
       })
+    ).rejects.toMatchObject({ code: 'provider_unavailable', httpStatus: 503 })
+  })
+})
+
+describe('TokenrouterAdapter videoGeneration', () => {
+  it('seedance-2.0 posts to /v1/videos and returns queued AsyncResult', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos', (body) => { capturedBody = body; return true })
+      .reply(200, videoCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'seedance-2.0',
+      prompt: 'a cat walking',
+      ratio: '16:9',
+      duration: '5',
+    })
+
+    expect(result.status).toBe('queued')
+    expect(result.provider).toBe('tokenrouter')
+    expect(result.provider_task_id).toBe('tr-video-task-abc123')
+    expect(result.poll_after_ms).toBeGreaterThan(0)
+    expect(capturedBody.model).toBe('dreamina-seedance-2-0-260128')
+    expect(capturedBody.prompt).toBe('a cat walking')
+    expect(capturedBody.seconds).toBe(5)
+  })
+
+  it('seedance-2.0-fast maps to dreamina-seedance-2-0-fast-260128', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos', (body) => { capturedBody = body; return true })
+      .reply(200, videoCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await adapter.videoGeneration!({
+      model: 'seedance-2.0-fast',
+      prompt: 'quick clip',
+      ratio: '9:16',
+      duration: '5',
+    })
+
+    expect(capturedBody.model).toBe('dreamina-seedance-2-0-fast-260128')
+  })
+
+  it('9:16 ratio maps to portrait size', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos', (body) => { capturedBody = body; return true })
+      .reply(200, videoCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await adapter.videoGeneration!({
+      model: 'seedance-2.0',
+      prompt: 'portrait',
+      ratio: '9:16',
+      duration: '5',
+    })
+
+    const [w, h] = (capturedBody.size as string).split('x').map(Number)
+    expect(h).toBeGreaterThan(w)
+  })
+
+  it('with input_assets sends image_url as signed URL', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos', (body) => { capturedBody = body; return true })
+      .reply(200, videoCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await adapter.videoGeneration!({
+      model: 'seedance-2.0',
+      prompt: 'image to video',
+      ratio: '16:9',
+      duration: '5',
+      input_assets: ['ast_img1'],
+    })
+
+    expect(capturedBody.image_url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1\?expires=/)
+  })
+})
+
+describe('TokenrouterAdapter taskStatus', () => {
+  it('pending status returns running', async () => {
+    nock(BASE)
+      .get('/v1/videos/tr-video-task-abc123')
+      .reply(200, videoCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.taskStatus!('tr-video-task-abc123')
+    expect(result.status).toBe('running')
+    expect(result.poll_after_ms).toBeGreaterThan(0)
+  })
+
+  it('running status returns running', async () => {
+    nock(BASE)
+      .get('/v1/videos/tr-video-task-abc123')
+      .reply(200, videoRunningFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.taskStatus!('tr-video-task-abc123')
+    expect(result.status).toBe('running')
+  })
+
+  it('completed status returns succeeded with video URL', async () => {
+    nock(BASE)
+      .get('/v1/videos/tr-video-task-abc123')
+      .reply(200, videoCompletedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.taskStatus!('tr-video-task-abc123')
+    expect(result.status).toBe('succeeded')
+    expect(result.outputs).toHaveLength(1)
+    expect(result.outputs![0].kind).toBe('video')
+    expect(result.outputs![0].url).toBe('https://cdn.tokenrouter.com/videos/seedance-result-abc123.mp4')
+  })
+
+  it('failed status returns failed with error message', async () => {
+    nock(BASE)
+      .get('/v1/videos/tr-video-task-abc123')
+      .reply(200, videoFailedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.taskStatus!('tr-video-task-abc123')
+    expect(result.status).toBe('failed')
+    expect(result.error?.message).toBe('Content policy violation')
+  })
+
+  it('network error maps to provider_unavailable', async () => {
+    nock(BASE)
+      .get('/v1/videos/tr-video-task-abc123')
+      .replyWithError('ECONNREFUSED')
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await expect(
+      adapter.taskStatus!('tr-video-task-abc123')
     ).rejects.toMatchObject({ code: 'provider_unavailable', httpStatus: 503 })
   })
 })

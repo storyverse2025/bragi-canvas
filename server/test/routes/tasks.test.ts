@@ -63,14 +63,18 @@ describe('GET /v1/tasks/:provider/:task_id', () => {
     expect(body.status).toBe('running')
   })
 
-  it('rejects sync-only provider tokenrouter with 400 invalid_request', async () => {
-    const res = await buildApp().request('/v1/tasks/tokenrouter/some-task', {
+  it('accepts tokenrouter provider for task polling (seedance-2.0 is async)', async () => {
+    process.env.TOKENROUTER_API_KEY = 'sk-tokenrouter-test'
+    const taskId = 'tr-video-task-abc123'
+    nock('https://api.tokenrouter.com')
+      .get(`/v1/videos/${taskId}`)
+      .reply(200, { task_id: taskId, status: 'running', model: 'dreamina-seedance-2-0-260128' })
+    const res = await buildApp().request(`/v1/tasks/tokenrouter/${taskId}`, {
       method: 'GET',
       headers: { Authorization: 'Bearer svsk-test-1' },
     })
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.error.code).toBe('invalid_request')
-    expect(body.error.message).toMatch(/sync-only/)
+    expect(body.status).toBe('running')
   })
 })

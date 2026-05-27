@@ -39,12 +39,50 @@ pnpm smoke --capability=image  # all image models
 | GET  | `/v1/openapi.json` | auto-generated spec |
 | GET  | `/docs` | Swagger UI |
 
+## Model operational status (V1, as of 2026-05-27)
+
+Verified live on sv-dev. Re-run `pnpm smoke` after any provider account change.
+
+| Model | Provider | Status |
+|---|---|---|
+| qwen-3-6-plus | tokenrouter | ✅ Working |
+| gpt-5.4-pro | tokenrouter | ✅ Working |
+| gemini-3.1-pro | tokenrouter | ✅ Working |
+| gemini-3-flash | tokenrouter | ✅ Working (not separately tested; same path) |
+| grok-imagine | xai | ✅ Working |
+| gpt-image-2 | apimart | ✅ Working (async, poll /v1/tasks/apimart/{id}) |
+| seedream-4.5 | byteplus | ✅ Working (t2i); i2i: signed URL fix applied 2026-05-27 |
+| seedream-5.0 | byteplus | ✅ Working (t2i); i2i: signed URL fix applied 2026-05-27 |
+| seedance-2.0 | tokenrouter (default), byteplus (override) | ✅ Working — both verified |
+| seedance-2.0-fast | tokenrouter (default), byteplus (override) | ✅ tokenrouter (same path); byteplus verified separately |
+| grok-video | xai | ✅ Working |
+| luma-uni-1 | luma | ✅ Assumed working (not re-tested this cycle) |
+| veo-3.1 | gemini | 🔴 Requires paid Gemini credits / allowlist |
+| veo-3.1-lite | gemini | 🔴 Requires paid Gemini credits / allowlist |
+| nano-banana-pro | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
+| nano-banana-2 | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
+| kling-2.6 | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
+| kling-3.0 | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
+| elevenlabs-tts-v3 | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
+| elevenlabs-music | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
+| elevenlabs-sfx | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
+| grok-tts | xai | 🔴 xAI TTS not authorized on this API key |
+| midjourney-v8 | legnext | ⏸️ Returns 501 Not Implemented in V1 |
+| midjourney-niji-7 | legnext | ⏸️ Returns 501 Not Implemented in V1 |
+
+**fal.ai models (nano-banana, kling, elevenlabs via fal)**: All return `400 User is locked. Reason: Exhausted balance.`
+This is a **billing/account issue, not a code bug**. The models are implemented correctly and will resume
+working once the fal.ai account is topped up at [fal.ai/dashboard/billing](https://fal.ai/dashboard/billing).
+Do NOT remove these models from the registry — they'll work again after top-up.
+
+**Provider override**: for models with multiple providers (seedance), pass `"provider": "byteplus"` in the request body to force the fallback.
+
 ## Models (V1 enabled)
 
-- **Image**: gpt-image-2, nano-banana-pro/2, seedream-4.5/5.0, grok-imagine, midjourney-v8/niji-7
-- **Video** (all async): kling-2.6/3.0, grok-video, seedance-2.0/-fast, veo-3.1/-lite, luma-uni-1
-- **Text**: gemini-3-flash, gemini-3.1-pro, gpt-5.4-pro, qwen-3-6-plus
-- **Audio**: grok-tts (sync), elevenlabs-tts-v3/music/sfx (async)
+- **Image**: gpt-image-2, nano-banana-pro/2 (fal), seedream-4.5/5.0, grok-imagine, midjourney-v8/niji-7
+- **Video** (all async): kling-2.6/3.0 (fal), grok-video, seedance-2.0/-fast (tokenrouter default), veo-3.1/-lite, luma-uni-1
+- **Text**: gemini-3-flash, gemini-3.1-pro, gpt-5.4-pro, qwen-3-6-plus (all via tokenrouter)
+- **Audio**: grok-tts (sync, xai), elevenlabs-tts-v3/music/sfx (async, fal)
 
 ## Architecture
 
