@@ -48,15 +48,19 @@ describe('GET /v1/tasks/:provider/:task_id', () => {
     expect(body.error.message).toMatch(/sync-only/)
   })
 
-  it('rejects sync-only provider xai with 400 invalid_request', async () => {
-    const res = await buildApp().request('/v1/tasks/xai/some-task', {
+  it('accepts xai provider for task polling (grok-video is async)', async () => {
+    process.env.XAI_API_KEY = 'xai-test'
+    const taskId = 'e1719105-a601-9742-84c7-test12345678'
+    nock('https://api.x.ai')
+      .get(`/v1/videos/${taskId}`)
+      .reply(200, { status: 'pending', progress: 30 })
+    const res = await buildApp().request(`/v1/tasks/xai/${taskId}`, {
       method: 'GET',
       headers: { Authorization: 'Bearer svsk-test-1' },
     })
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.error.code).toBe('invalid_request')
-    expect(body.error.message).toMatch(/sync-only/)
+    expect(body.status).toBe('running')
   })
 
   it('rejects sync-only provider tokenrouter with 400 invalid_request', async () => {

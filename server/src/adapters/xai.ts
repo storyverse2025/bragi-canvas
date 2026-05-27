@@ -2,32 +2,29 @@
  * xAI Adapter (Grok models)
  *
  * Supported models:
- *   Image (sync):  grok-imagine → upstream "grok-imagine-image"
- *   Audio TTS:     grok-tts    → upstream "grok-2-tts-1" (returns binary audio bytes)
+ *   Image (sync):   grok-imagine  → upstream "grok-imagine-image-quality"
+ *   Video (async):  grok-video    → upstream "grok-imagine-video" (native xAI video API)
+ *   Audio TTS:      grok-tts      → upstream "grok-2-tts-1" (returns binary audio bytes)
  *
  * Auth: Authorization: Bearer ${XAI_API_KEY}
  * Base: https://api.x.ai/v1
  *
- * CONCERNS / ASSUMPTIONS (verify during live smoke Task 31):
- *   1. Image upstream model name: "grok-2-image-1212" — best guess based on xAI naming
- *      conventions. Live smoke should confirm the exact model ID accepted by the API.
- *   2. TTS upstream model name: "grok-2-tts-1" — best guess. May be "grok-tts-1" or similar.
- *   3. Image generation request: OpenAI-compatible shape { model, prompt, n }.
- *      xAI may accept additional fields (quality, style, etc.) not yet exposed.
- *   4. TTS voice mapping: uses OpenAI voice names (alloy, echo, etc.). xAI may use
- *      different voice IDs — confirm via live smoke.
- *   5. Image response: OpenAI-compatible { data: [{ url }] }. xAI may also support
- *      b64_json format; we always request URL mode.
- *   6. TTS response: raw binary audio bytes with Content-Type: audio/mpeg.
- *      We read the response as arrayBuffer and convert to Buffer.
+ * Video API shape (verified 2026-05-27):
+ *   Submit: POST /v1/videos/generations → { request_id }
+ *   Poll:   GET  /v1/videos/{request_id} → { status: "pending"|"processing"|"succeeded"|"failed", progress, video_url? }
  */
 
-import type { Adapter, SyncResult } from './types.js'
+import type { Adapter, AsyncResult, SyncResult, TaskStatusResult } from './types.js'
 import { ApiError, toHttpStatus } from '../errors.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
+import type { VideosGenerationsRequest } from '../schemas/videos-generations.js'
 import type { AudioSpeechRequest } from '../schemas/audio-speech.js'
+import { materializeAsset } from './materialize-asset.js'
 
 const BASE = 'https://api.x.ai/v1'
+
+/** Poll interval for grok-imagine-video tasks (seconds are estimated at ~5s intervals) */
+const XAI_VIDEO_POLL_AFTER_MS = 5_000
 
 /** Map our image model IDs to xAI upstream model names */
 const IMAGE_MODEL_MAP: Record<string, string> = {
@@ -126,6 +123,78 @@ export class XAIAdapter implements Adapter {
   // ---------------------------------------------------------------------------
   // Adapter interface
   // ---------------------------------------------------------------------------
+
+  async videoGeneration(
+    req: Extract<VideosGenerationsRequest, { model: 'grok-video' }>,
+  ): Promise<AsyncResult> {
+    const body: Record<string, unknown> = {
+      model: 'grok-imagine-video',
+      prompt: req.prompt,
+      resolution: '720p',
+    }
+
+    if (req.input_assets && req.input_assets.length > 0) {
+      const m = await materializeAsset(req.input_assets[0], 'url')
+      body.image_url = m.url
+    }
+
+    const r: any = await this.callJson('POST', '/videos/generations', body)
+
+    const requestId: string = r.request_id
+    if (!requestId) {
+      throw new ApiError('provider_unavailable', `xAI video response missing request_id: ${JSON.stringify(r)}`, 502, r)
+    }
+
+    return {
+      status: 'queued',
+      provider: 'xai',
+      provider_task_id: requestId,
+      poll_after_ms: XAI_VIDEO_POLL_AFTER_MS,
+    }
+  }
+
+  async taskStatus(taskId: string): Promise<TaskStatusResult> {
+    const t0 = Date.now()
+
+    const r: any = await this.callJson('GET', `/videos/${taskId}`)
+    const status: string = (r.status ?? '').toLowerCase()
+
+    if (status === 'succeeded' || status === 'completed') {
+      const videoUrl: string = r.video_url ?? r.video?.url
+      if (!videoUrl) {
+        return {
+          status: 'failed',
+          error: { code: 'provider_unavailable', message: `xAI video succeeded but no video_url: ${JSON.stringify(r)}` },
+          latency_ms: Date.now() - t0,
+        }
+      }
+      return {
+        status: 'succeeded',
+        outputs: [{ kind: 'video', url: videoUrl, mime_type: 'video/mp4' }],
+        latency_ms: Date.now() - t0,
+      }
+    }
+
+    if (status === 'failed') {
+      const msg = r.error ?? r.message ?? 'xAI video generation failed'
+      return {
+        status: 'failed',
+        error: {
+          code: 'provider_unavailable',
+          message: typeof msg === 'string' ? msg : JSON.stringify(msg),
+          provider_raw: r,
+        },
+        latency_ms: Date.now() - t0,
+      }
+    }
+
+    // pending / processing
+    return {
+      status: 'running',
+      latency_ms: Date.now() - t0,
+      poll_after_ms: XAI_VIDEO_POLL_AFTER_MS,
+    }
+  }
 
   async imageGeneration(
     req: Extract<ImagesGenerationsRequest, { model: 'grok-imagine' }>,
