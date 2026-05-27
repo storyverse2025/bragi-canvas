@@ -31,15 +31,19 @@ const tasksGetRoute = createRoute({
   },
   responses: {
     200: {
-      description: 'Task status',
+      description: 'Task status. status field is one of: running | succeeded | failed. Note: a provider-side task failure is reported as HTTP 200 with status:"failed" (not an HTTP error), since the poll itself succeeded.',
       content: { 'application/json': { schema: z.any() } },
     },
     400: {
-      description: 'Invalid provider',
+      description: 'Unknown provider or sync-only provider (no task polling)',
       content: { 'application/json': { schema: z.any() } },
     },
     401: {
       description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    503: {
+      description: 'Provider transport failure while polling',
       content: { 'application/json': { schema: z.any() } },
     },
   },

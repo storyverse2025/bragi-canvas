@@ -84,6 +84,14 @@ const audioMusicRoute = createRoute({
       description: 'Invalid or missing svsk- token',
       content: { 'application/json': { schema: z.any() } },
     },
+    500: {
+      description: 'Internal error',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    503: {
+      description: 'Provider unavailable (upstream transport failure)',
+      content: { 'application/json': { schema: z.any() } },
+    },
   },
 })
 
@@ -110,6 +118,14 @@ const audioSfxRoute = createRoute({
     },
     401: {
       description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    500: {
+      description: 'Internal error',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    503: {
+      description: 'Provider unavailable (upstream transport failure)',
       content: { 'application/json': { schema: z.any() } },
     },
   },

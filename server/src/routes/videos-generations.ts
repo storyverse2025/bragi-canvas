@@ -28,15 +28,23 @@ const videosGenerationsRoute = createRoute({
   },
   responses: {
     202: {
-      description: 'Video generation queued',
+      description: 'Async video task queued',
       content: { 'application/json': { schema: z.any() } },
     },
     400: {
-      description: 'Validation or unknown model error',
+      description: 'Validation error / missing asset / unknown model',
       content: { 'application/json': { schema: z.any() } },
     },
     401: {
       description: 'Invalid or missing svsk- token',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    500: {
+      description: 'Internal error',
+      content: { 'application/json': { schema: z.any() } },
+    },
+    503: {
+      description: 'Provider unavailable (upstream transport failure)',
       content: { 'application/json': { schema: z.any() } },
     },
   },
