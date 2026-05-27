@@ -149,7 +149,8 @@ describe('TokenrouterAdapter videoGeneration', () => {
     expect(result.poll_after_ms).toBeGreaterThan(0)
     expect(capturedBody.model).toBe('dreamina-seedance-2-0-260128')
     expect(capturedBody.prompt).toBe('a cat walking')
-    expect(capturedBody.seconds).toBe(5)
+    // tokenrouter Videos API expects seconds as a string
+    expect(capturedBody.seconds).toBe('5')
   })
 
   it('seedance-2.0-fast maps to dreamina-seedance-2-0-fast-260128', async () => {

@@ -134,7 +134,8 @@ export class TokenrouterAdapter implements Adapter {
   ): Promise<AsyncResult> {
     const upstreamModel = VIDEO_MODEL_MAP[req.model] ?? req.model
     const size = seedanceSize(req)
-    const seconds = req.duration ? Number(req.duration) : 5
+    // tokenrouter Videos API: seconds is a string (per their Go struct definition)
+    const seconds = req.duration ? String(req.duration) : '5'
 
     const body: Record<string, unknown> = {
       model: upstreamModel,
