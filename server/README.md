@@ -43,42 +43,40 @@ pnpm smoke --capability=image  # all image models
 
 Verified live on sv-dev. Re-run `pnpm smoke` after any provider account change.
 
+**17/24 working · 1 works-but-slow · 4 account-gated · 2 deferred to V2.**
+
 | Model | Provider | Status |
 |---|---|---|
 | qwen-3-6-plus | tokenrouter | ✅ Working |
-| gpt-5.4-pro | tokenrouter | ✅ Working |
+| gpt-5.4-pro | tokenrouter | ✅ Working (upstream openai/gpt-5.5) |
+| gemini-3-flash | tokenrouter | ✅ Working |
 | gemini-3.1-pro | tokenrouter | ✅ Working |
-| gemini-3-flash | tokenrouter | ✅ Working (not separately tested; same path) |
-| grok-imagine | xai | ✅ Working |
+| grok-imagine | xai (native) | ✅ Working |
 | gpt-image-2 | apimart | ✅ Working (async, poll /v1/tasks/apimart/{id}) |
-| seedream-4.5 | byteplus | ✅ Working (t2i); i2i: signed URL fix applied 2026-05-27 |
-| seedream-5.0 | byteplus | ✅ Working (t2i); i2i: signed URL fix applied 2026-05-27 |
-| seedance-2.0 | tokenrouter (default), byteplus (override) | ✅ Working — both verified |
-| seedance-2.0-fast | tokenrouter (default), byteplus (override) | ✅ tokenrouter (same path); byteplus verified separately |
-| grok-video | xai | ✅ Working |
-| luma-uni-1 | luma | ✅ Assumed working (not re-tested this cycle) |
-| veo-3.1 | gemini | 🔴 Requires paid Gemini credits / allowlist |
-| veo-3.1-lite | gemini | 🔴 Requires paid Gemini credits / allowlist |
-| nano-banana-pro | apimart | ✅ Working (apimart: gemini-3-pro-image-preview; revived from fal balance block) |
-| nano-banana-2 | apimart | ✅ Working (apimart: gemini-3.1-flash-image-preview; revived from fal balance block) |
-| kling-2.6 | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
-| kling-3.0 | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
-| elevenlabs-tts-v3 | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
-| elevenlabs-music | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
-| elevenlabs-sfx | fal | 🔴 fal.ai balance exhausted — top up at fal.ai/dashboard/billing |
-| grok-tts | xai | 🔴 xAI TTS not authorized on this API key |
-| midjourney-v8 | legnext | ⏸️ Returns 501 Not Implemented in V1 |
-| midjourney-niji-7 | legnext | ⏸️ Returns 501 Not Implemented in V1 |
+| nano-banana-pro | apimart | ✅ Working (gemini-3-pro-image-preview) |
+| nano-banana-2 | apimart | ✅ Working (gemini-3.1-flash-image-preview) |
+| seedream-4.5 | byteplus (北京区) | ✅ Working (t2i + i2i signed-URL) |
+| seedream-5.0 | byteplus (北京区) | ✅ Working (t2i + i2i signed-URL) |
+| seedance-2.0 | tokenrouter (byteplus override) | ✅ Working (OpenAI Videos API) |
+| seedance-2.0-fast | tokenrouter (byteplus override) | ✅ Working |
+| kling-2.6 | fal | ✅ Working |
+| kling-3.0 | fal | ✅ Working |
+| elevenlabs-sfx | elevenlabs (native) | ✅ Working (direct /v1/sound-generation) |
+| elevenlabs-tts-v3 | elevenlabs (native) | ✅ Working (direct /v1/text-to-speech; voice-name→id mapping) |
+| elevenlabs-music | elevenlabs (native) | ✅ Working (direct /v1/music, paid plan) |
+| grok-video | xai (native) | 🟡 Works but slow (xAI i2v >15min; avoid time-sensitive demos) |
+| veo-3.1 | gemini | 🔴 Gemini credits depleted — top up Google AI billing |
+| veo-3.1-lite | gemini | 🔴 Gemini credits depleted |
+| luma-uni-1 | luma | 🔴 Luma proxy token not authenticated; no team video reference impl |
+| grok-tts | xai (native) | 🔴 xAI account not authorized for TTS (code ready) |
+| midjourney-v8 | legnext | ⏸️ Returns 501 in V1 (Legnext vendor integration deferred to V2) |
+| midjourney-niji-7 | legnext | ⏸️ Returns 501 in V1 |
 
-**fal.ai models (kling, elevenlabs via fal)**: All return `400 User is locked. Reason: Exhausted balance.`
-This is a **billing/account issue, not a code bug**. The models are implemented correctly and will resume
-working once the fal.ai account is topped up at [fal.ai/dashboard/billing](https://fal.ai/dashboard/billing).
-Do NOT remove these models from the registry — they'll work again after top-up.
+**ElevenLabs (sfx / tts-v3 / music)**: all on native ElevenLabs direct (paid key). TTS resolves friendly voice names (adam, rachel, …) and OpenAI-style aliases (alloy, echo, …) to ElevenLabs voice_ids; unknown voices fall back to Adam.
 
-**nano-banana models**: Switched to apimart (gemini-3-pro-image-preview / gemini-3.1-flash-image-preview).
-fal remains available as override (`"provider": "fal"`) for when fal.ai balance is restored.
+**Provider override**: for models with multiple providers (nano-banana: apimart↔fal; seedance: tokenrouter↔byteplus; elevenlabs: elevenlabs↔fal), pass `"provider": "<name>"` in the request body. Invalid combos return 400 listing valid options.
 
-**Provider override**: for models with multiple providers (seedance), pass `"provider": "byteplus"` in the request body to force the fallback.
+**Remaining blockers**: veo (Gemini credits), luma-uni-1 (token + no video impl), grok-tts (xAI TTS permission), midjourney (V2 vendor), grok-video (slow). All are account/vendor issues, not code bugs.
 
 ## Models (V1 enabled)
 
