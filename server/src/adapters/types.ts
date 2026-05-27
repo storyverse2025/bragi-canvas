@@ -35,6 +35,6 @@ export interface Adapter {
   videoGeneration?(req: any): Promise<AsyncResult>
   audioSpeech?(req: any): Promise<{ status: 'succeeded'; bytes: Buffer; mimeType: string; latency_ms: number; provider: string; model: string } | AsyncResult>
   audioMusic?(req: any): Promise<AsyncResult>
-  audioSfx?(req: any): Promise<AsyncResult>
+  audioSfx?(req: any): Promise<{ status: 'succeeded'; bytes: Buffer; mimeType: string; latency_ms: number; provider: string; model: string } | AsyncResult>
   taskStatus?(taskId: string): Promise<TaskStatusResult>
 }

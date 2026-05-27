@@ -101,7 +101,7 @@ const audioSfxRoute = createRoute({
   method: 'post',
   path: '/audio/sfx',
   tags: ['audio'],
-  summary: 'Sound effects generation (async)',
+  summary: 'Sound effects generation (sync bytes or async)',
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -110,8 +110,14 @@ const audioSfxRoute = createRoute({
     },
   },
   responses: {
+    200: {
+      description: 'Generated SFX audio bytes (sync — elevenlabs direct)',
+      content: {
+        'audio/mpeg': { schema: { type: 'string', format: 'binary' } as unknown as ZodSchema },
+      },
+    },
     202: {
-      description: 'SFX generation queued',
+      description: 'SFX generation queued (async — fal)',
       content: { 'application/json': { schema: z.any() } },
     },
     400: {
@@ -245,6 +251,12 @@ audioRoute.openapi(audioSfxRoute, async c => {
     const a = adapterFor(provider)
     if (!a.audioSfx) throw new ApiError('internal_error', `adapter missing audioSfx`, 500)
     const r = await a.audioSfx(req)
+    if ('bytes' in r) {
+      // Sync result (e.g. elevenlabs direct) — return bytes immediately
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return new Response(new Uint8Array(r.bytes), { headers: { 'Content-Type': r.mimeType } }) as any
+    }
+    // AsyncResult (e.g. fal queue)
     const encodedTaskIdSfx = encodeTaskId(r.provider_task_id)
     const pollUrlSfx = `${env.ROUTER_PUBLIC_URL}/v1/tasks/${r.provider}/${encodedTaskIdSfx}`
     return c.json({ task_id: encodedTaskIdSfx, provider: r.provider, poll_after_ms: r.poll_after_ms, poll_url: pollUrlSfx }, 202)

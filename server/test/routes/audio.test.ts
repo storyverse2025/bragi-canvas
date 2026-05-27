@@ -59,6 +59,37 @@ describe('POST /v1/audio/speech', () => {
     expect(body.error.code).toBe('invalid_request')
   })
 
+  it('elevenlabs-sfx routes to elevenlabs adapter and returns 200 bytes', async () => {
+    process.env.ELEVENLABS_API_KEY = 'el-test-key'
+    const audioBytes = Buffer.from('fake-sfx-audio')
+    nock('https://api.elevenlabs.io')
+      .post('/v1/sound-generation')
+      .reply(200, audioBytes, { 'Content-Type': 'audio/mpeg' })
+    const res = await buildApp().request('/v1/audio/sfx', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer svsk-test-1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'elevenlabs-sfx', prompt: 'rain on tin roof', duration_seconds: 3 }),
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toContain('audio/mpeg')
+  })
+
+  it('elevenlabs-tts-v3 routes to elevenlabs adapter and returns 200 bytes', async () => {
+    process.env.ELEVENLABS_API_KEY = 'el-test-key'
+    const audioBytes = Buffer.from('fake-tts-audio')
+    nock('https://api.elevenlabs.io')
+      .post('/v1/text-to-speech/pNInz6obpgDQGcFmaJgB')
+      .query(true)
+      .reply(200, audioBytes, { 'Content-Type': 'audio/mpeg' })
+    const res = await buildApp().request('/v1/audio/speech', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer svsk-test-1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'elevenlabs-tts-v3', input: 'Hello world', voice: 'pNInz6obpgDQGcFmaJgB' }),
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toContain('audio/mpeg')
+  })
+
   it('declares 200 response as audio/* in openapi doc', async () => {
     const app = buildDocApp()
     const res = await app.request('/v1/openapi.json')

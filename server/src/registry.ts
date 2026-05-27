@@ -1,6 +1,6 @@
 import { ApiError } from './errors.js'
 
-export type Provider = 'openai' | 'gemini' | 'byteplus' | 'fal' | 'luma' | 'xai' | 'legnext' | 'tokenrouter' | 'apimart'
+export type Provider = 'openai' | 'gemini' | 'byteplus' | 'fal' | 'luma' | 'xai' | 'legnext' | 'tokenrouter' | 'apimart' | 'elevenlabs'
 export type Capability = 'image' | 'video' | 'text' | 'audio'
 
 export interface RegistryEntry {
@@ -36,11 +36,12 @@ const REGISTRY: Record<string, RegistryEntry> = {
   'gpt-5.4-pro':        { provider: 'tokenrouter', capability: 'text', async: false },
   'qwen-3-6-plus':      { provider: 'tokenrouter', capability: 'text', async: false },
 
-  // audio — elevenlabs: native key empty/free-tier → keep on fal
-  'grok-tts':           { provider: 'xai',  capability: 'audio', async: false },
-  'elevenlabs-tts-v3':  { provider: 'fal',  capability: 'audio', async: true  },
-  'elevenlabs-music':   { provider: 'fal',  capability: 'audio', async: true  },
-  'elevenlabs-sfx':     { provider: 'fal',  capability: 'audio', async: true  },
+  // audio — elevenlabs-tts-v3 + elevenlabs-sfx → direct ElevenLabs (verified 2026-05-27: free tier OK from sv-dev)
+  //         elevenlabs-music → fal (402 paid-plan required on free tier, keep on fal)
+  'grok-tts':           { provider: 'xai',         capability: 'audio', async: false },
+  'elevenlabs-tts-v3':  { provider: 'elevenlabs',  capability: 'audio', async: false },
+  'elevenlabs-music':   { provider: 'fal',          capability: 'audio', async: true  },
+  'elevenlabs-sfx':     { provider: 'elevenlabs',  capability: 'audio', async: false },
 }
 
 /**
@@ -70,9 +71,9 @@ export const MODEL_PROVIDER_OPTIONS: Record<string, Set<Provider>> = {
   'gpt-5.4-pro':        new Set(['tokenrouter']),
   'qwen-3-6-plus':      new Set(['tokenrouter']),
   'grok-tts':           new Set(['xai']),
-  'elevenlabs-tts-v3':  new Set(['fal']),
+  'elevenlabs-tts-v3':  new Set(['elevenlabs', 'fal']),
   'elevenlabs-music':   new Set(['fal']),
-  'elevenlabs-sfx':     new Set(['fal']),
+  'elevenlabs-sfx':     new Set(['elevenlabs', 'fal']),
 }
 
 export function lookupModel(modelId: string): RegistryEntry | undefined {

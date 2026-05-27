@@ -1,0 +1,6 @@
+{
+  "detail": {
+    "status": "detected_unusual_activity",
+    "message": "Unusual activity detected. Free Tier usage disabled."
+  }
+}

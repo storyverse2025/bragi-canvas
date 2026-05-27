@@ -23,6 +23,7 @@ const EnvSchema = z.object({
   TOKENROUTER_API_KEY: z.string().optional(),
   APIMART_API_KEY: z.string().optional(),
   APIMART_BASE_URL: z.string().optional().default('https://api.apimart.ai'),
+  ELEVENLABS_API_KEY: z.string().optional(),
 })
 
 export const env = EnvSchema.parse(process.env)
