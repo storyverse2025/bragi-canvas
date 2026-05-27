@@ -2118,7 +2118,7 @@ ssh sv-dev '
 ```bash
 ssh sv-dev '
 BASE=https://35.168.148.47.nip.io
-TOKEN=svsk-weichu-localtest
+TOKEN=$BRAGI_TOKEN   # set BRAGI_TOKEN to your svsk- token
 
 echo "=== TEXT ==="
 for MODEL in gpt-5.4-pro gemini-3-flash gemini-3.1-pro qwen-3-6-plus; do
