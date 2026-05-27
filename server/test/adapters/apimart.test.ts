@@ -1,11 +1,23 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import nock from 'nock'
 import submitFx from '../fixtures/apimart/submit-success.json' with { type: 'json' }
 import taskCompletedFx from '../fixtures/apimart/task-completed.json' with { type: 'json' }
 import errorFx from '../fixtures/apimart/error-400.json' with { type: 'json' }
 import { ApimartAdapter } from '../../src/adapters/apimart.js'
+import { storeAsset } from '../../src/assets.js'
 
 const BASE = 'https://api.apimart.ai'
+
+beforeEach(async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'router-apimart-'))
+  process.env.ASSET_TMP_DIR = dir
+  process.env.ASSET_SIGNING_SECRET = '0123456789abcdef0123456789abcdef'
+  process.env.ROUTER_PUBLIC_URL = 'https://router.test'
+  await storeAsset(dir, 'ast_x', Buffer.from('IMGDATA'), 'image/png')
+})
 
 afterEach(() => {
   nock.cleanAll()
@@ -130,7 +142,7 @@ describe('ApimartAdapter', () => {
     }
   })
 
-  it('sends image_urls when input_assets are provided', async () => {
+  it('materializes asset IDs to signed URLs before sending image_urls (P2.6)', async () => {
     let capturedBody: any = null
     nock(BASE)
       .post('/v1/images/generations', (body) => { capturedBody = body; return true })
@@ -142,10 +154,14 @@ describe('ApimartAdapter', () => {
       prompt: 'edit this image',
       n: 1,
       size: '1024x1024',
-      input_assets: ['https://example.com/ref.png'],
+      input_assets: ['ast_x'],
     })
 
-    expect(capturedBody.image_urls).toEqual(['https://example.com/ref.png'])
+    // Must NOT pass the raw ID; must be a signed URL starting with http
+    expect(capturedBody.image_urls).toHaveLength(1)
+    expect(capturedBody.image_urls[0]).toMatch(/^https?:\/\//)
+    expect(capturedBody.image_urls[0]).not.toBe('ast_x')
+    expect(capturedBody.image_urls[0]).toContain('ast_x')
   })
 
   it('4xx error maps to provider_invalid_request', async () => {

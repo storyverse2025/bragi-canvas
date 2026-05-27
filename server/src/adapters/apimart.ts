@@ -16,6 +16,7 @@
 import type { Adapter, AsyncResult, TaskStatusResult } from './types.js'
 import { ApiError, toHttpStatus } from '../errors.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
+import { materializeAsset } from './materialize-asset.js'
 
 const APIMART_POLL_AFTER_MS = 5_000
 
@@ -96,9 +97,15 @@ export class ApimartAdapter implements Adapter {
       resolution: '2k',
     }
 
-    // I2I: pass image URLs from input_assets (mirrors apimart_images.py _submit)
+    // I2I: materialize asset IDs to signed URLs before forwarding (mirrors apimart_images.py _submit)
     if (req.input_assets && req.input_assets.length > 0) {
-      body.image_urls = req.input_assets
+      const imageUrls = await Promise.all(
+        req.input_assets.map(async (id) => {
+          const m = await materializeAsset(id, 'url')
+          return m.url!
+        })
+      )
+      body.image_urls = imageUrls
     }
 
     const r: any = await this.call('POST', '/v1/images/generations', body)
