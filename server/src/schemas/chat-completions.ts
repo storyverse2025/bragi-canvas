@@ -7,7 +7,7 @@ const MessageSchema = z.object({
 
 export const ChatCompletionsBody = z.discriminatedUnion('model', [
   z.object({
-    model: z.literal('gpt-5.4-pro'),
+    model: z.literal('gpt-5.5-pro'),
     messages: z.array(MessageSchema),
     temperature: z.number().min(0).max(2).optional(),
     max_tokens: z.number().int().positive().optional(),
