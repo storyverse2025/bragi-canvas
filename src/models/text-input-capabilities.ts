@@ -30,6 +30,11 @@ const PROVIDER_DEFAULTS: Record<string, TextInputCapability> = {
 	xai: { kinds: IMAGE_PDF, maxPdfBytes: 48 * 1024 * 1024 },
 	apimart: { kinds: IMAGE_PDF, maxPdfBytes: 50 * 1024 * 1024 },
 	dashscope: { kinds: ['image', 'pdf', 'video', 'audio'], maxVideos: 64 },
+	// V1 router /v1/chat/completions schema is text-only (messages[].content: string), so
+	// cloud-mode text supports NO upstream attachments. Explicit empty kinds → the pre-flight
+	// validator refuses image/PDF/video/audio inputs up front rather than letting the request
+	// fall through and silently drop them. V2 router will extend the schema to support multimodal.
+	storyverse: { kinds: [] },
 }
 
 function tokenRouterCapability(apiModelId: string): TextInputCapability {

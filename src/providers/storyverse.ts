@@ -6,6 +6,7 @@ import type {
 	GenerateImageResult, GenerateVideoResult, GenerateAudioResult,
 } from './types'
 import type { TextGenProvider, TextGenResult } from './text-gen'
+import { SYSTEM_PROMPT } from './text-gen'
 
 /**
  * Storyverse Cloud provider — plugin client for the Bragi V1 router.
@@ -241,8 +242,18 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 	private buildBody(model: string, prompt: string, p: Record<string, unknown>, inputAssets: string[]): Record<string, unknown> {
 		const assets = inputAssets.length ? { input_assets: inputAssets } : {}
 		switch (model) {
-			case 'gpt-image-2':
+			case 'gpt-image-2': {
+				// Router /v1/images/generations schema for gpt-image-2 only accepts
+				// size ∈ {1024x1024, 1792x1024, 1024x1792} (i.e. "1K") and has no `quality` field.
+				// The plugin UI surfaces 1K/2K/4K + Auto/Low/Medium/High; in cloud mode 2K/4K can't
+				// be served, so we refuse explicitly rather than silently downsizing.
+				const imageSize = str(p.imageSize, 'auto')
+				if (imageSize === '2K' || imageSize === '4K') {
+					throw new Error('Storyverse: gpt-image-2 via Cloud Mode only supports 1K (1024) size in V1. Pick 1K/Auto, or use Local Mode.')
+				}
+				// quality is silently dropped — router schema has no such field. (Tracked as V1 known limit.)
 				return { model, prompt, n: 1, size: aspectToSize(p.aspectRatio), ...assets }
+			}
 			case 'nano-banana-pro':
 			case 'nano-banana-2':
 				return { model, prompt, aspectRatio: str(p.aspectRatio, '1:1'), ...assets }
@@ -310,8 +321,20 @@ export class StoryverseVideoProvider extends StoryverseClient implements VideoPr
 			case 'grok-video':
 				return { model, prompt, duration: '6', input_assets: inputAssets }
 			case 'veo-3.1':
-			case 'veo-3.1-lite':
+			case 'veo-3.1-lite': {
+				// V1 router /v1/videos/generations Veo schema accepts only { prompt, aspectRatio }
+				// — no input_assets, no duration, no resolution. The plugin UI exposes first-frame /
+				// first-last-frame / image-ref modes + durationSeconds + resolution, all of which
+				// can't be served by the current router. Detect refuse refs by inspecting the user's
+				// `refImages` directly (inputAssets is already empty here because veo isn't in
+				// VIDEO_MODELS_ACCEPTING_REFS — we drop refs before reaching this branch).
+				// duration/resolution are silently dropped (V2 router will extend the Veo schema).
+				const userRefs = (p.refImages as string[] | undefined) || []
+				if (userRefs.length > 0) {
+					throw new Error('Storyverse: Veo via Cloud Mode does not support reference frames in V1. Use Local Mode or wait for V2 router schema upgrade.')
+				}
 				return { model, prompt, aspectRatio: str(p.aspectRatio, '16:9') }
+			}
 			case 'luma-uni-1':
 				return { model, prompt, aspectRatio: str(p.aspectRatio, '16:9'), ...assets }
 			default:
@@ -326,9 +349,14 @@ export class StoryverseTextProvider extends StoryverseClient implements TextGenP
 
 	async generateText(prompt: string, params: Record<string, unknown> = {}): Promise<TextGenResult> {
 		const model = str(params.modelId)
+		// Inject the shared SYSTEM_PROMPT so cloud-mode text honors the same ---SPLIT--- convention
+		// as every Local-mode text provider (text-gen.ts). Without this, multi-segment splitting silently breaks.
 		const resp = await this.postJson('/v1/chat/completions', {
 			model,
-			messages: [{ role: 'user', content: prompt }],
+			messages: [
+				{ role: 'system', content: SYSTEM_PROMPT },
+				{ role: 'user', content: prompt },
+			],
 			stream: false,
 		})
 		const content = (resp.json as { choices?: Array<{ message?: { content?: string } }> })?.choices?.[0]?.message?.content
@@ -378,7 +406,10 @@ export class StoryverseAudioProvider extends StoryverseClient implements AudioPr
 			case 'elevenlabs-tts-v3':
 				return { path: '/v1/audio/speech', body: { model, input: prompt, voice: str(p.voice), response_format: str(p.response_format, 'mp3') } }
 			case 'elevenlabs-music':
-				return { path: '/v1/audio/music', body: { model, prompt, duration_ms: Math.round(num(p.music_length_ms, 30000)), instrumental: bool(p.instrumental) } }
+				// `music_length_ms` is a misnomer on the plugin side — the slider value is in SECONDS
+				// (audio.ts: min 3, max 300, unit 's'). Local ElevenLabs (elevenlabs.ts) multiplies by 1000
+				// before sending. Keep cloud parity: multiply here too.
+				return { path: '/v1/audio/music', body: { model, prompt, duration_ms: Math.round(num(p.music_length_ms, 30) * 1000), instrumental: bool(p.instrumental) } }
 			case 'elevenlabs-sfx':
 				return { path: '/v1/audio/sfx', body: { model, prompt, duration_seconds: num(p.duration, 5) } }
 			default:
