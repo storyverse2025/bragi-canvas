@@ -36,6 +36,74 @@ const VIDEO_MODELS_ACCEPTING_REFS = new Set([
 	'kling-2.6', 'kling-3.0', 'seedance-2.0', 'seedance-2.0-fast', 'grok-video',
 ])
 
+/**
+ * Parameters the plugin UI exposes but the V1 router schema doesn't accept.
+ * The plugin always fills each param with its model default, so we silently
+ * drop the default value (otherwise even an unmodified UI would throw) — but
+ * if the user changed the control to a non-default value we throw, so they
+ * don't silently lose what they picked. This matches the review guidance:
+ * "implement, hide, or refuse — don't silently drop."
+ *
+ * `defaultValue` mirrors `default` in the corresponding `src/models/*.ts`.
+ * V2 follow-up: extend router schemas so these can be implemented for real,
+ * then remove from this table.
+ */
+const CLOUD_UNSUPPORTED_PARAMS: Record<string, Array<{ key: string; defaultValue: string | number }>> = {
+	// images — router has no size/quality/resolution fields beyond `size` enum on gpt-image-2
+	'nano-banana-pro':   [{ key: 'imageSize', defaultValue: '1K' }],
+	'nano-banana-2':     [{ key: 'imageSize', defaultValue: '1K' }],
+	'gpt-image-2':       [
+		{ key: 'imageSize', defaultValue: '2K' },   // plugin default (2K) silently dropped; router has no size field beyond the aspect-derived enum
+		{ key: 'quality',   defaultValue: 'auto' },
+	],
+	'seedream-4.5':      [{ key: 'resolution', defaultValue: '2K' }],
+	'seedream-5.0':      [{ key: 'resolution', defaultValue: '2K' }],
+
+	// video — router schemas are param-light
+	'grok-video':        [
+		{ key: 'duration',     defaultValue: '5' },     // router schema enum locks '6'; we send '6' regardless. default '5' silent, anything else throws
+		{ key: 'aspect_ratio', defaultValue: '16:9' },
+		{ key: 'resolution',   defaultValue: '720p' },
+	],
+	'kling-2.6':         [{ key: 'mode', defaultValue: 'std' }],
+	'kling-3.0':         [{ key: 'mode', defaultValue: 'std' }],
+	// Veo's first-frame/refs handled separately in buildBody — see VIDEO_MODELS_ACCEPTING_REFS + the veo throw.
+	// Veo also exposes durationSeconds + resolution in the plugin UI; both are silently dropped (router veo schema is { prompt, aspectRatio }-only).
+	'veo-3.1':           [{ key: 'durationSeconds', defaultValue: '6' }, { key: 'resolution', defaultValue: '720p' }],
+	'veo-3.1-lite':      [{ key: 'durationSeconds', defaultValue: '6' }, { key: 'resolution', defaultValue: '720p' }],
+
+	// audio
+	'elevenlabs-tts-v3': [
+		{ key: 'stability',        defaultValue: 0.5 },
+		{ key: 'similarity_boost', defaultValue: 0.75 },
+		{ key: 'style',            defaultValue: 0 },
+	],
+	'grok-tts':          [{ key: 'language', defaultValue: 'auto' }],
+
+	// image (async)
+	'midjourney-v8':     [{ key: 'ar', defaultValue: '1:1' }, { key: 'stylize', defaultValue: 100 }],
+	'midjourney-niji-7': [{ key: 'ar', defaultValue: '1:1' }, { key: 'stylize', defaultValue: 100 }],
+}
+
+/** Throw if the user changed any cloud-unsupported param away from its plugin default. */
+function refuseCloudUnsupportedNonDefault(modelId: string, p: Record<string, unknown>): void {
+	const entries = CLOUD_UNSUPPORTED_PARAMS[modelId]
+	if (!entries) return
+	for (const { key, defaultValue } of entries) {
+		const value = p[key]
+		if (value === undefined || value === null || value === '') continue
+		// Plugin params are select(string) / range(number) — skip anything else defensively.
+		if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
+		// Loose string compare so select(string) and range(number) both work.
+		if (String(value) === String(defaultValue)) continue
+		throw new Error(
+			`Storyverse: parameter "${key}" is not supported in Cloud Mode V1 for ${modelId} ` +
+			`(router schema has no such field; default ${JSON.stringify(defaultValue)} is silently passed through, ` +
+			`but UI value ${JSON.stringify(value)} cannot be served). Use Local Mode, or revert "${key}" to its default.`,
+		)
+	}
+}
+
 interface RouterOutput { kind?: string; url?: string; text?: string; mime_type?: string }
 
 // ── small coercion helpers (panel sends select values as strings) ──
@@ -222,6 +290,7 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 
 	async generateImage(prompt: string, params: Record<string, unknown> = {}): Promise<GenerateImageResult> {
 		const model = str(params.modelId)
+		refuseCloudUnsupportedNonDefault(model, params)
 		const refs = IMAGE_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
 		const inputAssets = await this.uploadAssets(refs)
 		const body = this.buildBody(model, prompt, params, inputAssets)
@@ -242,18 +311,10 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 	private buildBody(model: string, prompt: string, p: Record<string, unknown>, inputAssets: string[]): Record<string, unknown> {
 		const assets = inputAssets.length ? { input_assets: inputAssets } : {}
 		switch (model) {
-			case 'gpt-image-2': {
-				// Router /v1/images/generations schema for gpt-image-2 only accepts
-				// size ∈ {1024x1024, 1792x1024, 1024x1792} (i.e. "1K") and has no `quality` field.
-				// The plugin UI surfaces 1K/2K/4K + Auto/Low/Medium/High; in cloud mode 2K/4K can't
-				// be served, so we refuse explicitly rather than silently downsizing.
-				const imageSize = str(p.imageSize, 'auto')
-				if (imageSize === '2K' || imageSize === '4K') {
-					throw new Error('Storyverse: gpt-image-2 via Cloud Mode only supports 1K (1024) size in V1. Pick 1K/Auto, or use Local Mode.')
-				}
-				// quality is silently dropped — router schema has no such field. (Tracked as V1 known limit.)
+			case 'gpt-image-2':
+				// imageSize / quality handled by refuseCloudUnsupportedNonDefault at the entry — default
+				// values silently dropped, user-modified values throw with a clear message.
 				return { model, prompt, n: 1, size: aspectToSize(p.aspectRatio), ...assets }
-			}
 			case 'nano-banana-pro':
 			case 'nano-banana-2':
 				return { model, prompt, aspectRatio: str(p.aspectRatio, '1:1'), ...assets }
@@ -280,6 +341,7 @@ export class StoryverseVideoProvider extends StoryverseClient implements VideoPr
 
 	async generateVideo(prompt: string, params: Record<string, unknown> = {}): Promise<GenerateVideoResult> {
 		const model = str(params.modelId)
+		refuseCloudUnsupportedNonDefault(model, params)
 		const refs = VIDEO_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
 		const inputAssets = await this.uploadAssets(refs)
 		const body = this.buildBody(model, prompt, params, inputAssets)
@@ -371,6 +433,7 @@ export class StoryverseAudioProvider extends StoryverseClient implements AudioPr
 
 	async generateAudio(prompt: string, options: { mode: 'tts' | 'music' | 'sound-effect'; modelId?: string; [k: string]: unknown }): Promise<GenerateAudioResult> {
 		const model = str(options.modelId)
+		refuseCloudUnsupportedNonDefault(model, options)
 		const { path, body } = this.buildRequest(model, prompt, options)
 		const resp = await requestUrl({
 			url: `${this.baseUrl}${path}`,
