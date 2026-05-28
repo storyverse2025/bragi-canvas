@@ -39,6 +39,10 @@ const chatCompletionsRoute = createRoute({
       description: 'Invalid or missing svsk- token',
       content: { 'application/json': { schema: z.any() } },
     },
+    503: {
+      description: 'Provider unavailable — upstream transport failure or 5xx normalized (error.code = "provider_unavailable")',
+      content: { 'application/json': { schema: z.any() } },
+    },
   },
 })
 
