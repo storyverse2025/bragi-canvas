@@ -25,6 +25,16 @@ import type { TextGenProvider, TextGenResult } from './text-gen'
 const POLL_TIMEOUT_MS = 5 * 60 * 1000   // give async image/audio up to 5 min inline
 const DEFAULT_POLL_MS = 4000
 
+// Router image/video schemas only accept `input_assets` for these models. For
+// the rest (grok-imagine, midjourney-*, veo-*) the field doesn't exist in the
+// schema, so uploading refs would be a wasted round-trip. Keep this set tight.
+const IMAGE_MODELS_ACCEPTING_REFS = new Set([
+	'gpt-image-2', 'nano-banana-pro', 'nano-banana-2', 'seedream-4.5', 'seedream-5.0',
+])
+const VIDEO_MODELS_ACCEPTING_REFS = new Set([
+	'kling-2.6', 'kling-3.0', 'seedance-2.0', 'seedance-2.0-fast', 'grok-video',
+])
+
 interface RouterOutput { kind?: string; url?: string; text?: string; mime_type?: string }
 
 // ── small coercion helpers (panel sends select values as strings) ──
@@ -211,7 +221,8 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 
 	async generateImage(prompt: string, params: Record<string, unknown> = {}): Promise<GenerateImageResult> {
 		const model = str(params.modelId)
-		const inputAssets = await this.uploadAssets(params.refImages as string[] | undefined)
+		const refs = IMAGE_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
+		const inputAssets = await this.uploadAssets(refs)
 		const body = this.buildBody(model, prompt, params, inputAssets)
 		const resp = await this.postJson('/v1/images/generations', body)
 
@@ -258,7 +269,8 @@ export class StoryverseVideoProvider extends StoryverseClient implements VideoPr
 
 	async generateVideo(prompt: string, params: Record<string, unknown> = {}): Promise<GenerateVideoResult> {
 		const model = str(params.modelId)
-		const inputAssets = await this.uploadAssets(params.refImages as string[] | undefined)
+		const refs = VIDEO_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
+		const inputAssets = await this.uploadAssets(refs)
 		const body = this.buildBody(model, prompt, params, inputAssets)
 		const resp = await this.postJson('/v1/videos/generations', body)
 		const { provider, task_id } = resp.json as { provider: string; task_id: string }
