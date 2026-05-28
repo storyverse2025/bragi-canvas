@@ -49,7 +49,7 @@ describe('TokenrouterAdapter', () => {
     expect(result.latency_ms).toBeGreaterThanOrEqual(0)
   })
 
-  it('chatCompletion gpt-5.4-pro maps to openai/gpt-5.5', async () => {
+  it('chatCompletion gpt-5.5-pro maps to openai/gpt-5.5', async () => {
     let capturedBody: any = null
     nock(BASE)
       .post('/v1/chat/completions', (body) => { capturedBody = body; return true })
@@ -57,13 +57,13 @@ describe('TokenrouterAdapter', () => {
 
     const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
     const result = await adapter.chatCompletion!({
-      model: 'gpt-5.4-pro',
+      model: 'gpt-5.5-pro',
       messages: [{ role: 'user', content: 'Hello' }],
     })
 
     expect(result.status).toBe('succeeded')
     expect(capturedBody.model).toBe('openai/gpt-5.5')
-    expect(result.model).toBe('gpt-5.4-pro')
+    expect(result.model).toBe('gpt-5.5-pro')
   })
 
   it('chatCompletion gemini-3.1-pro maps to google/gemini-3.1-pro-preview', async () => {

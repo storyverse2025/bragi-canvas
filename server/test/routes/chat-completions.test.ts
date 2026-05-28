@@ -17,13 +17,13 @@ describe('POST /v1/chat/completions', () => {
     const res = await buildApp().request('/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: 'Bearer svsk-test-1', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-5.4-pro', messages: [{ role: 'user', content: 'ping' }] }),
+      body: JSON.stringify({ model: 'gpt-5.5-pro', messages: [{ role: 'user', content: 'ping' }] }),
     })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.choices[0].message.content).toBe('pong')
     // response model should be our public-facing name, not the upstream model
-    expect(body.model).toBe('gpt-5.4-pro')
+    expect(body.model).toBe('gpt-5.5-pro')
   })
 
   it('rejects unknown model', async () => {
@@ -40,7 +40,7 @@ describe('POST /v1/chat/completions', () => {
     const res = await buildApp().request('/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-5.4-pro', messages: [{ role: 'user', content: 'hi' }] }),
+      body: JSON.stringify({ model: 'gpt-5.5-pro', messages: [{ role: 'user', content: 'hi' }] }),
     })
     expect(res.status).toBe(401)
   })

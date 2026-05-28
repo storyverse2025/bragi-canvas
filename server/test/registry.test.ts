@@ -12,8 +12,8 @@ describe('registry', () => {
     expect(r).toEqual({ provider: 'fal', capability: 'video', async: true })
   })
 
-  it('looks up gpt-5.4-pro → tokenrouter/text/sync', () => {
-    const r = lookupModel('gpt-5.4-pro')
+  it('looks up gpt-5.5-pro → tokenrouter/text/sync', () => {
+    const r = lookupModel('gpt-5.5-pro')
     expect(r).toEqual({ provider: 'tokenrouter', capability: 'text', async: false })
   })
 

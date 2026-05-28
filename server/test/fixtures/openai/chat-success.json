@@ -2,7 +2,7 @@
   "id": "chatcmpl-abc",
   "object": "chat.completion",
   "created": 1700000000,
-  "model": "gpt-5.4-pro",
+  "model": "gpt-5.5-pro",
   "choices": [
     { "index": 0, "message": { "role": "assistant", "content": "hi back" }, "finish_reason": "stop" }
   ],

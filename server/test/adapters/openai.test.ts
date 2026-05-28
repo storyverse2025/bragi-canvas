@@ -14,7 +14,7 @@ describe('OpenAI adapter', () => {
     nock('https://api.openai.com').post('/v1/chat/completions').reply(200, chatFx)
     const a = new OpenAIAdapter('sk-test')
     const r = await a.chatCompletion!({
-      model: 'gpt-5.4-pro',
+      model: 'gpt-5.5-pro',
       messages: [{ role: 'user', content: 'hi' }],
     })
     expect(r.status).toBe('succeeded')
@@ -36,7 +36,7 @@ describe('OpenAI adapter', () => {
     nock('https://api.openai.com').post('/v1/chat/completions').reply(400, { error: { message: 'bad', type: 'invalid_request_error' } })
     const a = new OpenAIAdapter('sk-test')
     await expect(a.chatCompletion!({
-      model: 'gpt-5.4-pro', messages: [{ role: 'user', content: 'x' }],
+      model: 'gpt-5.5-pro', messages: [{ role: 'user', content: 'x' }],
     })).rejects.toMatchObject({ code: 'provider_invalid_request' })
   })
 
@@ -44,7 +44,7 @@ describe('OpenAI adapter', () => {
     nock('https://api.openai.com').post('/v1/chat/completions').reply(503, 'down')
     const a = new OpenAIAdapter('sk-test')
     await expect(a.chatCompletion!({
-      model: 'gpt-5.4-pro', messages: [{ role: 'user', content: 'x' }],
+      model: 'gpt-5.5-pro', messages: [{ role: 'user', content: 'x' }],
     })).rejects.toMatchObject({ code: 'provider_unavailable' })
   })
 })

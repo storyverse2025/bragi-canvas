@@ -30,10 +30,10 @@ const REGISTRY: Record<string, RegistryEntry> = {
   'veo-3.1-lite':       { provider: 'gemini',      capability: 'video', async: true },
   'luma-uni-1':         { provider: 'luma',        capability: 'video', async: true },
 
-  // text — gpt-5.4-pro, gemini-3-flash, gemini-3.1-pro now via tokenrouter
+  // text — gpt-5.5-pro, gemini-3-flash, gemini-3.1-pro now via tokenrouter
   'gemini-3-flash':     { provider: 'tokenrouter', capability: 'text', async: false },
   'gemini-3.1-pro':     { provider: 'tokenrouter', capability: 'text', async: false },
-  'gpt-5.4-pro':        { provider: 'tokenrouter', capability: 'text', async: false },
+  'gpt-5.5-pro':        { provider: 'tokenrouter', capability: 'text', async: false },
   'qwen-3-6-plus':      { provider: 'tokenrouter', capability: 'text', async: false },
 
   // audio — all elevenlabs models → direct ElevenLabs native (paid key confirmed 2026-05-27)
@@ -68,7 +68,7 @@ export const MODEL_PROVIDER_OPTIONS: Record<string, Set<Provider>> = {
   'luma-uni-1':         new Set(['luma']),
   'gemini-3-flash':     new Set(['tokenrouter']),
   'gemini-3.1-pro':     new Set(['tokenrouter']),
-  'gpt-5.4-pro':        new Set(['tokenrouter']),
+  'gpt-5.5-pro':        new Set(['tokenrouter']),
   'qwen-3-6-plus':      new Set(['tokenrouter']),
   'grok-tts':           new Set(['xai']),
   'elevenlabs-tts-v3':  new Set(['elevenlabs', 'fal']),

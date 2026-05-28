@@ -5,7 +5,7 @@
  * LLM and video generation models.
  *
  * Supported models:
- *   Chat (sync):   qwen-3-6-plus, gpt-5.4-pro, gemini-3.1-pro, gemini-3-flash
+ *   Chat (sync):   qwen-3-6-plus, gpt-5.5-pro, gemini-3.1-pro, gemini-3-flash
  *   Video (async): seedance-2.0  → dreamina-seedance-2-0-260128
  *                  seedance-2.0-fast → dreamina-seedance-2-0-fast-260128
  *
@@ -34,7 +34,7 @@ const SEEDANCE_POLL_AFTER_MS = 8_000
  */
 const CHAT_MODEL_MAP: Record<string, string> = {
   'qwen-3-6-plus':  'qwen/qwen3.6-plus',
-  'gpt-5.4-pro':    'openai/gpt-5.5',
+  'gpt-5.5-pro':    'openai/gpt-5.5',
   'gemini-3.1-pro': 'google/gemini-3.1-pro-preview',
   'gemini-3-flash': 'google/gemini-3-flash-preview',
 }

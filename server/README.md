@@ -48,7 +48,7 @@ Verified live on sv-dev. Re-run `pnpm smoke` after any provider account change.
 | Model | Provider | Status |
 |---|---|---|
 | qwen-3-6-plus | tokenrouter | ✅ Working |
-| gpt-5.4-pro | tokenrouter | ✅ Working (upstream openai/gpt-5.5) |
+| gpt-5.5-pro | tokenrouter | ✅ Working (upstream openai/gpt-5.5) |
 | gemini-3-flash | tokenrouter | ✅ Working |
 | gemini-3.1-pro | tokenrouter | ✅ Working |
 | grok-imagine | xai (native) | ✅ Working |
@@ -82,7 +82,7 @@ Verified live on sv-dev. Re-run `pnpm smoke` after any provider account change.
 
 - **Image**: gpt-image-2 (apimart), nano-banana-pro/2 (apimart), seedream-4.5/5.0, grok-imagine, midjourney-v8/niji-7
 - **Video** (all async): kling-2.6/3.0 (fal), grok-video, seedance-2.0/-fast (tokenrouter default), veo-3.1/-lite, luma-uni-1
-- **Text**: gemini-3-flash, gemini-3.1-pro, gpt-5.4-pro, qwen-3-6-plus (all via tokenrouter)
+- **Text**: gemini-3-flash, gemini-3.1-pro, gpt-5.5-pro, qwen-3-6-plus (all via tokenrouter)
 - **Audio**: grok-tts (sync, xai), elevenlabs-tts-v3/music/sfx (async, fal)
 
 ## Architecture
