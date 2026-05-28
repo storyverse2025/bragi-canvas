@@ -24,6 +24,7 @@ export const gptImage: ModelConfig = {
 	name: 'GPT Image 2',
 	type: 'image',
 	supportedProviders: {
+		storyverse: { apiModelId: 'gpt-image-2' },
 		openai: { apiModelId: 'gpt-image-2' },
 		fal: { apiModelId: 'fal-ai/gpt-image-2' },
 		tokenrouter: { apiModelId: 'openai/gpt-5.4-image-2' },

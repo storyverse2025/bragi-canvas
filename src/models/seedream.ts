@@ -16,6 +16,7 @@ export const seedream5: ModelConfig = {
 	name: 'Seedream 5.0',
 	type: 'image',
 	supportedProviders: {
+		storyverse: { apiModelId: 'seedream-5.0' },
 		bytedance: { apiModelId: 'doubao-seedream-5-0-260128' },
 	},
 	modes: ['text-to-image'],
@@ -45,6 +46,7 @@ export const seedream45: ModelConfig = {
 	name: 'Seedream 4.5',
 	type: 'image',
 	supportedProviders: {
+		storyverse: { apiModelId: 'seedream-4.5' },
 		bytedance: { apiModelId: 'doubao-seedream-4-5-251128' },
 		tokenrouter: { apiModelId: 'bytedance-seed/seedream-4.5' },
 	},

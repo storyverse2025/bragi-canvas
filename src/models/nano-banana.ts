@@ -26,6 +26,7 @@ export const nanoBananaPro: ModelConfig = {
 	name: 'Nano Banana Pro',
 	type: 'image',
 	supportedProviders: {
+		storyverse: { apiModelId: 'nano-banana-pro' },
 		gemini: { apiModelId: 'gemini-3-pro-image-preview' },
 		fal: { apiModelId: 'fal-ai/nano-banana-pro' },
 		tokenrouter: { apiModelId: 'google/gemini-3-pro-image-preview' },
@@ -59,6 +60,7 @@ export const nanoBanana2: ModelConfig = {
 	name: 'Nano Banana 2',
 	type: 'image',
 	supportedProviders: {
+		storyverse: { apiModelId: 'nano-banana-2' },
 		gemini: { apiModelId: 'gemini-3.1-flash-image-preview' },
 		fal: { apiModelId: 'fal-ai/nano-banana-2' },
 		tokenrouter: { apiModelId: 'google/gemini-3.1-flash-image-preview' },

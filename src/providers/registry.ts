@@ -24,6 +24,7 @@ import { DashScopeAudioProvider } from './dashscope'
 const LUMA_ENDPOINT = 'https://luma.bragi.now'
 import { OpenAITextProvider, APIMartTextProvider, GeminiTextProvider, AnthropicTextProvider, BedrockClaudeTextProvider, XAITextProvider } from './text-gen'
 import { DashScopeTextProvider } from './dashscope-text'
+import { StoryverseImageProvider, StoryverseVideoProvider, StoryverseTextProvider, StoryverseAudioProvider } from './storyverse'
 import { requestUrl } from 'obsidian'
 
 export type ProviderKey = keyof BragiSettings['providers']
@@ -483,6 +484,25 @@ export const PROVIDERS: ProviderSpec[] = [
 			}
 		},
 	},
+	{
+		// Bragi Cloud router. Not a per-key provider — driven by the top-level Cloud Mode
+		// settings (generationMode/bragiCloudUrl/bragiToken), so it has no `fields` and is
+		// hidden from the generic "add provider" catalog. The router picks the real provider
+		// per model, so the plugin sends only `model` (apiModelId) — never a provider.
+		id: 'storyverse',
+		name: 'Storyverse Cloud',
+		description: 'Bragi Cloud router — one token, server-side provider keys.',
+		fields: [],
+		isConfigured: (s) => s.generationMode === 'cloud' && !!s.bragiCloudUrl && !!s.bragiToken,
+		makeImage: ({ settings, app, outputDir }) =>
+			new StoryverseImageProvider(settings.bragiCloudUrl, settings.bragiToken, app, outputDir),
+		makeVideo: ({ settings, app, outputDir }) =>
+			new StoryverseVideoProvider(settings.bragiCloudUrl, settings.bragiToken, app, outputDir),
+		makeText: ({ settings, app, outputDir }) =>
+			new StoryverseTextProvider(settings.bragiCloudUrl, settings.bragiToken, app, outputDir),
+		makeAudio: ({ settings, app, outputDir }) =>
+			new StoryverseAudioProvider(settings.bragiCloudUrl, settings.bragiToken, app, outputDir),
+	},
 ]
 
 export function getProvider(id: string): ProviderSpec | undefined {
@@ -490,7 +510,15 @@ export function getProvider(id: string): ProviderSpec | undefined {
 }
 
 export function getConfiguredProviderIds(settings: BragiSettings): string[] {
-	return PROVIDERS.filter(p => p.isConfigured(settings)).map(p => p.id)
+	// Cloud Mode: the router is the only provider. Returning exactly ['storyverse']
+	// (when configured) makes getActiveProvider resolve every router-backed model to
+	// storyverse and filters out models the router can't serve — without touching any
+	// Local-Mode code path. See PR #2 design.
+	if (settings.generationMode === 'cloud') {
+		const sv = getProvider('storyverse')
+		return sv?.isConfigured(settings) ? ['storyverse'] : []
+	}
+	return PROVIDERS.filter(p => p.id !== 'storyverse' && p.isConfigured(settings)).map(p => p.id)
 }
 
 /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- Resume strict linting after the runtime-shaped data boundary. */

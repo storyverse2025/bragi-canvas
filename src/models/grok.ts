@@ -17,6 +17,7 @@ export const grokImagine: ModelConfig = {
 	name: 'Grok Imagine',
 	type: 'image',
 	supportedProviders: {
+		storyverse: { apiModelId: 'grok-imagine' },
 		// Default apiModelId is the quality tier; XAIImageProvider overrides based on the `quality` param.
 		xai: { apiModelId: 'grok-imagine-image-quality' },
 		fal: { apiModelId: 'xai/grok-imagine-image' },
@@ -48,6 +49,7 @@ export const grokVideo: ModelConfig = {
 	name: 'Grok Video',
 	type: 'video',
 	supportedProviders: {
+		storyverse: { apiModelId: 'grok-video' },
 		xai: { apiModelId: 'grok-imagine-video' },
 		fal: { apiModelId: 'xai/grok-imagine-video' },
 	},

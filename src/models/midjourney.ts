@@ -5,6 +5,7 @@ export const midjourneyV8: ModelConfig = {
 	name: 'Midjourney v8',
 	type: 'image',
 	supportedProviders: {
+		storyverse: { apiModelId: 'midjourney-v8' },
 		legnext: { apiModelId: 'midjourney' },
 	},
 	modes: ['text-to-image'],
@@ -54,6 +55,7 @@ export const midjourneyNiji7: ModelConfig = {
 	name: 'Midjourney niji 7',
 	type: 'image',
 	supportedProviders: {
+		storyverse: { apiModelId: 'midjourney-niji-7' },
 		legnext: { apiModelId: 'midjourney' },
 	},
 	modes: ['text-to-image'],

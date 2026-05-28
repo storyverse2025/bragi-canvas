@@ -111,6 +111,11 @@ export interface BragiSettings {
 	mcpPort: number
 	mcpToken: string   // optional; when non-empty, all requests require Authorization: Bearer <token>
 
+	// Bragi Cloud (Storyverse router). In 'cloud' mode every model routes through
+	// the router with a single svsk- token; the router picks the real provider.
+	generationMode: 'local' | 'cloud'
+	bragiCloudUrl: string
+	bragiToken: string
 }
 
 export const DEFAULT_SETTINGS: BragiSettings = {
@@ -153,6 +158,9 @@ export const DEFAULT_SETTINGS: BragiSettings = {
 	mcpToken: '',
 	knownCanvases: [],
 	generatedAssets: [],
+	generationMode: 'local',
+	bragiCloudUrl: 'https://35.168.148.47.nip.io',
+	bragiToken: '',
 }
 
 type ImportValidationResult =
@@ -453,6 +461,9 @@ export class BragiSettingTab extends PluginSettingTab {
 
 		addSettingHeading(containerEl, 'Bragi Canvas')
 
+		// ── Bragi Cloud (generation mode) ──
+		this.renderBragiCloudSection(containerEl)
+
 		// ── General ──
 		addSettingHeading(containerEl, 'General')
 
@@ -543,6 +554,71 @@ export class BragiSettingTab extends PluginSettingTab {
 		this.renderModelGroup(containerEl, 'Video Models', 'video')
 		this.renderModelGroup(containerEl, 'Text Models', 'text')
 		this.renderModelGroup(containerEl, 'Audio Models', 'audio')
+	}
+
+	private renderBragiCloudSection(containerEl: HTMLElement): void {
+		addSettingHeading(containerEl, 'Bragi Cloud')
+
+		new Setting(containerEl)
+			.setName('Generation mode')
+			.setDesc('Local uses your own provider keys. Cloud routes every model through the router with a single token — the router holds the keys.')
+			.addDropdown(dd => {
+				dd.addOption('local', 'Local (your own keys)')
+				dd.addOption('cloud', 'Cloud (shared router)')
+				dd.setValue(this.plugin.settings.generationMode)
+				dd.onChange((v) => {
+					void (async () => {
+						this.plugin.settings.generationMode = v === 'cloud' ? 'cloud' : 'local'
+						await this.plugin.saveSettings()
+						this.display()   // redraw so model list + provider dropdowns reflect the mode
+					})()
+				})
+			})
+
+		// URL + token only matter in Cloud Mode — hide the clutter in Local Mode.
+		if (this.plugin.settings.generationMode !== 'cloud') return
+
+		new Setting(containerEl)
+			.setName('Bragi cloud URL')
+			.setDesc('Base URL of the router.')
+			.addText(text => text
+				.setPlaceholder('https://35.168.148.47.nip.io')
+				.setValue(this.plugin.settings.bragiCloudUrl)
+				.onChange((v) => {
+					void (async () => {
+						this.plugin.settings.bragiCloudUrl = v.trim().replace(/\/+$/, '')
+						await this.plugin.saveSettings()
+					})()
+				}))
+
+		new Setting(containerEl)
+			.setName('Bragi token')
+			.setDesc('Your svsk- access token.')
+			.addText(text => {
+				text.inputEl.type = 'password'
+				text.setPlaceholder('Your svsk- token')
+					.setValue(this.plugin.settings.bragiToken)
+					.onChange((v) => {
+						void (async () => {
+							this.plugin.settings.bragiToken = v.trim()
+							await this.plugin.saveSettings()
+						})()
+					})
+			})
+			.addButton(btn => btn
+				.setButtonText('Test token')
+				.onClick(() => {
+					void (async () => {
+						btn.setDisabled(true).setButtonText('Testing…')
+						try {
+							const { testStoryverseAuth } = await import('./providers/storyverse')
+							const result = await testStoryverseAuth(this.plugin.settings.bragiCloudUrl, this.plugin.settings.bragiToken)
+							new Notice(result.ok ? result.message : `Test failed: ${result.message}`)
+						} finally {
+							btn.setDisabled(false).setButtonText('Test token')
+						}
+					})()
+				}))
 	}
 
 	private renderCloudStorageSection(containerEl: HTMLElement): void {
