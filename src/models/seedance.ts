@@ -57,6 +57,7 @@ export const seedance2: ModelConfig = {
 				{ label: '1080p', value: '1080p' },
 			],
 			default: '720p',
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'generate_audio',
@@ -124,6 +125,7 @@ export const seedance2Fast: ModelConfig = {
 				{ label: '720p', value: '720p' },
 			],
 			default: '720p',
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'generate_audio',

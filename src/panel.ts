@@ -511,6 +511,10 @@ export function showGenerateBar(
 		paramValues = {}
 		if (!selectedModel) return
 		for (const p of selectedModel.params) {
+			// Cloud Mode: skip params the router can't carry (the UI also hides them in
+			// rebuildParams). Not filling them into paramValues means the storyverse
+			// provider never sees those fields and we can't silently downgrade.
+			if (settings.generationMode === 'cloud' && p.unsupportedInCloud) continue
 			// Keep current value if same param exists and value is valid in new model
 			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (p.options?.length || 0) === 0
 			if (prev[p.id] !== undefined && (canKeepDynamicVoice || p.options?.some(o => o.value === String(prev[p.id])))) {
@@ -650,6 +654,8 @@ export function showGenerateBar(
 		paramsEl.innerHTML = ''
 		if (!selectedModel) return
 		for (const param of selectedModel.params) {
+			// Hide UI controls that the V1 router schema doesn't carry. Local Mode is unaffected.
+			if (settings.generationMode === 'cloud' && param.unsupportedInCloud) continue
 			if (param.type === 'select' && param.options) {
 				// Pick mode-specific options if declared; otherwise the base list.
 				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || param.options
@@ -1204,6 +1210,8 @@ export function showBatchGenerateBar(
 		paramValues = {}
 		if (!selectedModel) return
 		for (const p of selectedModel.params) {
+			// Cloud Mode: don't fill defaults for cloud-unsupported params (UI also hides them).
+			if (settings.generationMode === 'cloud' && p.unsupportedInCloud) continue
 			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (p.options?.length || 0) === 0
 			if (prev[p.id] !== undefined && (canKeepDynamicVoice || p.options?.some(o => o.value === String(prev[p.id])))) {
 				paramValues[p.id] = prev[p.id]
@@ -1218,6 +1226,8 @@ export function showBatchGenerateBar(
 		paramsEl.innerHTML = ''
 		if (!selectedModel) return
 		for (const param of selectedModel.params) {
+			// Hide UI controls that the V1 router schema doesn't carry. Local Mode is unaffected.
+			if (settings.generationMode === 'cloud' && param.unsupportedInCloud) continue
 			if (param.type === 'select' && param.options) {
 				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || param.options
 				const currentValue = String(paramValues[param.id] ?? param.default)

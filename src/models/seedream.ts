@@ -37,6 +37,7 @@ export const seedream5: ModelConfig = {
 				{ label: '3K', value: '3K' },
 			],
 			default: '2K',
+			unsupportedInCloud: true,
 		},
 	],
 }
@@ -68,6 +69,7 @@ export const seedream45: ModelConfig = {
 				{ label: '4K', value: '4K' },
 			],
 			default: '2K',
+			unsupportedInCloud: true,
 		},
 	],
 }

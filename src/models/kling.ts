@@ -31,6 +31,7 @@ const KLING_PARAMS = [
 			{ label: 'Pro', value: 'pro' },
 		],
 		default: 'std',
+		unsupportedInCloud: true,
 	},
 ]
 

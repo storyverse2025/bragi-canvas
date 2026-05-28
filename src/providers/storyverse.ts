@@ -7,6 +7,7 @@ import type {
 } from './types'
 import type { TextGenProvider, TextGenResult } from './text-gen'
 import { SYSTEM_PROMPT } from './text-gen'
+import { getModelById } from '../models/index'
 
 /**
  * Storyverse Cloud provider — plugin client for the Bragi V1 router.
@@ -37,69 +38,29 @@ const VIDEO_MODELS_ACCEPTING_REFS = new Set([
 ])
 
 /**
- * Parameters the plugin UI exposes but the V1 router schema doesn't accept.
- * The plugin always fills each param with its model default, so we silently
- * drop the default value (otherwise even an unmodified UI would throw) — but
- * if the user changed the control to a non-default value we throw, so they
- * don't silently lose what they picked. This matches the review guidance:
- * "implement, hide, or refuse — don't silently drop."
+ * Defensive throw if any param flagged `unsupportedInCloud:true` on the model
+ * definition (src/models/*.ts) reaches the provider. The panel hides these
+ * controls and skips them when filling `paramValues` in Cloud Mode, so under
+ * normal flow they never get here. This guard catches non-panel entry points
+ * (MCP tools, scripted calls) — and crucially makes the contract symmetric
+ * with the UI: a value present at all means the caller thinks it's supported,
+ * and we refuse rather than silently drop.
  *
- * `defaultValue` mirrors `default` in the corresponding `src/models/*.ts`.
- * V2 follow-up: extend router schemas so these can be implemented for real,
- * then remove from this table.
+ * Source of truth is the model definition's `unsupportedInCloud` flag —
+ * adding a new model with such a param automatically propagates here, with
+ * no separate hand-written allowlist to keep in sync.
  */
-const CLOUD_UNSUPPORTED_PARAMS: Record<string, Array<{ key: string; defaultValue: string | number }>> = {
-	// images — router has no size/quality/resolution fields beyond `size` enum on gpt-image-2
-	'nano-banana-pro':   [{ key: 'imageSize', defaultValue: '1K' }],
-	'nano-banana-2':     [{ key: 'imageSize', defaultValue: '1K' }],
-	'gpt-image-2':       [
-		{ key: 'imageSize', defaultValue: '2K' },   // plugin default (2K) silently dropped; router has no size field beyond the aspect-derived enum
-		{ key: 'quality',   defaultValue: 'auto' },
-	],
-	'seedream-4.5':      [{ key: 'resolution', defaultValue: '2K' }],
-	'seedream-5.0':      [{ key: 'resolution', defaultValue: '2K' }],
-
-	// video — router schemas are param-light
-	'grok-video':        [
-		{ key: 'duration',     defaultValue: '5' },     // router schema enum locks '6'; we send '6' regardless. default '5' silent, anything else throws
-		{ key: 'aspect_ratio', defaultValue: '16:9' },
-		{ key: 'resolution',   defaultValue: '720p' },
-	],
-	'kling-2.6':         [{ key: 'mode', defaultValue: 'std' }],
-	'kling-3.0':         [{ key: 'mode', defaultValue: 'std' }],
-	// Veo's first-frame/refs handled separately in buildBody — see VIDEO_MODELS_ACCEPTING_REFS + the veo throw.
-	// Veo also exposes durationSeconds + resolution in the plugin UI; both are silently dropped (router veo schema is { prompt, aspectRatio }-only).
-	'veo-3.1':           [{ key: 'durationSeconds', defaultValue: '6' }, { key: 'resolution', defaultValue: '720p' }],
-	'veo-3.1-lite':      [{ key: 'durationSeconds', defaultValue: '6' }, { key: 'resolution', defaultValue: '720p' }],
-
-	// audio
-	'elevenlabs-tts-v3': [
-		{ key: 'stability',        defaultValue: 0.5 },
-		{ key: 'similarity_boost', defaultValue: 0.75 },
-		{ key: 'style',            defaultValue: 0 },
-	],
-	'grok-tts':          [{ key: 'language', defaultValue: 'auto' }],
-
-	// image (async)
-	'midjourney-v8':     [{ key: 'ar', defaultValue: '1:1' }, { key: 'stylize', defaultValue: 100 }],
-	'midjourney-niji-7': [{ key: 'ar', defaultValue: '1:1' }, { key: 'stylize', defaultValue: 100 }],
-}
-
-/** Throw if the user changed any cloud-unsupported param away from its plugin default. */
-function refuseCloudUnsupportedNonDefault(modelId: string, p: Record<string, unknown>): void {
-	const entries = CLOUD_UNSUPPORTED_PARAMS[modelId]
-	if (!entries) return
-	for (const { key, defaultValue } of entries) {
-		const value = p[key]
+function refuseCloudUnsupportedParams(modelId: string, p: Record<string, unknown>): void {
+	const model = getModelById(modelId)
+	if (!model) return
+	for (const param of model.params) {
+		if (!param.unsupportedInCloud) continue
+		const value = p[param.id]
 		if (value === undefined || value === null || value === '') continue
-		// Plugin params are select(string) / range(number) — skip anything else defensively.
-		if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue
-		// Loose string compare so select(string) and range(number) both work.
-		if (String(value) === String(defaultValue)) continue
 		throw new Error(
-			`Storyverse: parameter "${key}" is not supported in Cloud Mode V1 for ${modelId} ` +
-			`(router schema has no such field; default ${JSON.stringify(defaultValue)} is silently passed through, ` +
-			`but UI value ${JSON.stringify(value)} cannot be served). Use Local Mode, or revert "${key}" to its default.`,
+			`Storyverse: parameter "${param.id}" is not supported in Cloud Mode V1 for ${modelId} ` +
+			`(router schema has no such field). The panel should hide this control in Cloud Mode; ` +
+			`if you're calling via MCP or a script, omit the field. Use Local Mode if you need it.`,
 		)
 	}
 }
@@ -121,6 +82,28 @@ function bool(v: unknown, fallback = false): boolean {
 }
 function sleep(ms: number): Promise<void> {
 	return new Promise(resolve => window.setTimeout(resolve, ms))
+}
+
+/**
+ * Defang upstream router error messages before surfacing them to the user-facing
+ * Notice: cap length, scrub URLs/host:port/file paths/token-shaped strings so any
+ * internal endpoint / provider debug info that the router happens to echo back
+ * can't leak through Cloud Mode. The error code (e.g. `provider_unavailable`)
+ * is preserved separately so users still get a useful classification.
+ */
+function sanitizeRouterMessage(raw: unknown): string {
+	// Only accept primitives — anything else is defensive `router error` to avoid
+	// surfacing `[object Object]` to the user.
+	const text = typeof raw === 'string' ? raw
+		: typeof raw === 'number' || typeof raw === 'boolean' ? String(raw)
+		: ''
+	return text
+		.replace(/https?:\/\/\S+/gi, '<url>')
+		.replace(/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/g, '<host>')
+		.replace(/\b\w+-[A-Za-z0-9]{16,}/g, '<token>')   // svsk-*, sk-*, etc.
+		.replace(/\/(?:Users|home|opt|var|etc|tmp)\/[^\s)]+/g, '<path>')
+		.slice(0, 200)
+		|| 'router error'
 }
 
 /** OpenAI gpt-image-2 takes a pixel `size`, not an aspect ratio. */
@@ -177,14 +160,18 @@ class StoryverseClient {
 		return { 'Authorization': `Bearer ${this.token}`, ...(extra || {}) }
 	}
 
-	/** Turn a `{status:'failed', error:{code,message}}` body (or any 4xx/5xx) into a thrown Error. */
+	/**
+	 * Turn a `{status:'failed', error:{code,message}}` body (or any 4xx/5xx) into a thrown Error.
+	 * Sanitizes the message: caps length to 200 chars, scrubs URLs and file paths so
+	 * upstream internal endpoints / debug info never leak to the user-facing Notice.
+	 */
 	private fail(resp: RequestUrlResponse): never {
 		let body: unknown = resp.json
 		if (typeof body === 'undefined') { try { body = JSON.parse(resp.text || '') } catch { body = null } }
 		const err = (body as { error?: { code?: string; message?: string } })?.error
 		const code = err?.code ? `${err.code} — ` : ''
-		const msg = err?.message || resp.text?.substring(0, 200) || `HTTP ${resp.status}`
-		throw new Error(`Storyverse: ${code}${msg}`)
+		const rawMsg = err?.message || resp.text || `HTTP ${resp.status}`
+		throw new Error(`Storyverse: ${code}${sanitizeRouterMessage(rawMsg)}`)
 	}
 
 	protected async postJson(path: string, body: unknown): Promise<RequestUrlResponse> {
@@ -258,7 +245,7 @@ class StoryverseClient {
 			if (data?.status === 'succeeded') return data.outputs || []
 			if (data?.status === 'failed') {
 				const e = data.error
-				throw new Error(`Storyverse: ${e?.code ? e.code + ' — ' : ''}${e?.message || 'task failed'}`)
+				throw new Error(`Storyverse: ${e?.code ? e.code + ' — ' : ''}${sanitizeRouterMessage(e?.message || 'task failed')}`)
 			}
 			if (Date.now() > deadline) throw new Error('Storyverse: timed out waiting for task')
 			await sleep(Math.max(1000, num(data?.poll_after_ms, DEFAULT_POLL_MS)))
@@ -290,7 +277,7 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 
 	async generateImage(prompt: string, params: Record<string, unknown> = {}): Promise<GenerateImageResult> {
 		const model = str(params.modelId)
-		refuseCloudUnsupportedNonDefault(model, params)
+		refuseCloudUnsupportedParams(model, params)
 		const refs = IMAGE_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
 		const inputAssets = await this.uploadAssets(refs)
 		const body = this.buildBody(model, prompt, params, inputAssets)
@@ -312,8 +299,9 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 		const assets = inputAssets.length ? { input_assets: inputAssets } : {}
 		switch (model) {
 			case 'gpt-image-2':
-				// imageSize / quality handled by refuseCloudUnsupportedNonDefault at the entry — default
-				// values silently dropped, user-modified values throw with a clear message.
+				// imageSize / quality flagged `unsupportedInCloud:true` on the gpt-image-2 model —
+				// the panel hides those controls, paramValues skips them, and
+				// refuseCloudUnsupportedParams throws if anything still slips through.
 				return { model, prompt, n: 1, size: aspectToSize(p.aspectRatio), ...assets }
 			case 'nano-banana-pro':
 			case 'nano-banana-2':
@@ -341,7 +329,7 @@ export class StoryverseVideoProvider extends StoryverseClient implements VideoPr
 
 	async generateVideo(prompt: string, params: Record<string, unknown> = {}): Promise<GenerateVideoResult> {
 		const model = str(params.modelId)
-		refuseCloudUnsupportedNonDefault(model, params)
+		refuseCloudUnsupportedParams(model, params)
 		const refs = VIDEO_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
 		const inputAssets = await this.uploadAssets(refs)
 		const body = this.buildBody(model, prompt, params, inputAssets)
@@ -366,7 +354,7 @@ export class StoryverseVideoProvider extends StoryverseClient implements VideoPr
 		}
 		if (data?.status === 'failed') {
 			const e = data.error
-			throw new Error(`Storyverse: ${e?.code ? e.code + ' — ' : ''}${e?.message || 'video task failed'}`)
+			throw new Error(`Storyverse: ${e?.code ? e.code + ' — ' : ''}${sanitizeRouterMessage(e?.message || 'video task failed')}`)
 		}
 		return { done: false, taskId: encoded }
 	}
@@ -433,7 +421,7 @@ export class StoryverseAudioProvider extends StoryverseClient implements AudioPr
 
 	async generateAudio(prompt: string, options: { mode: 'tts' | 'music' | 'sound-effect'; modelId?: string; [k: string]: unknown }): Promise<GenerateAudioResult> {
 		const model = str(options.modelId)
-		refuseCloudUnsupportedNonDefault(model, options)
+		refuseCloudUnsupportedParams(model, options)
 		const { path, body } = this.buildRequest(model, prompt, options)
 		const resp = await requestUrl({
 			url: `${this.baseUrl}${path}`,
@@ -446,7 +434,7 @@ export class StoryverseAudioProvider extends StoryverseClient implements AudioPr
 			let err: unknown = resp.json
 			if (typeof err === 'undefined') { try { err = JSON.parse(resp.text || '') } catch { err = null } }
 			const e = (err as { error?: { code?: string; message?: string } })?.error
-			throw new Error(`Storyverse: ${e?.code ? e.code + ' — ' : ''}${e?.message || `HTTP ${resp.status}`}`)
+			throw new Error(`Storyverse: ${e?.code ? e.code + ' — ' : ''}${sanitizeRouterMessage(e?.message || `HTTP ${resp.status}`)}`)
 		}
 
 		const ext = body.response_format ? str(body.response_format, 'mp3') : 'mp3'
@@ -491,12 +479,16 @@ export async function testStoryverseAuth(baseUrl: string, token: string): Promis
 			throw: false,
 		})
 		if (resp.status === 200 && (resp.json as { ok?: boolean })?.ok) {
-			return { ok: true, message: `Token OK (${(resp.json as { label?: string }).label || 'authenticated'})` }
+			// Intentionally NOT echoing the router's `label` field — it may carry the
+			// raw svsk- token (current router does), a tenant / env name, or other
+			// internal identifier. Generic success keeps the UI Notice safe to screenshot.
+			return { ok: true, message: 'Token OK' }
 		}
 		if (resp.status === 401) return { ok: false, message: 'Token not recognized' }
 		return { ok: false, message: `Unexpected status ${resp.status}` }
 	} catch (err: unknown) {
-		return { ok: false, message: `Network error: ${(err as { message?: string })?.message || String(err)}` }
+		const raw = (err as { message?: string })?.message || String(err)
+		return { ok: false, message: `Network error: ${sanitizeRouterMessage(raw)}` }
 	}
 }
 

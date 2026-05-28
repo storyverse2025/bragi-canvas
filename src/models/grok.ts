@@ -72,6 +72,7 @@ export const grokVideo: ModelConfig = {
 				],
 			},
 			default: '5',
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'aspect_ratio',
@@ -87,6 +88,7 @@ export const grokVideo: ModelConfig = {
 				{ label: '2:3', value: '2:3' },
 			],
 			default: '16:9',
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'resolution',
@@ -98,6 +100,7 @@ export const grokVideo: ModelConfig = {
 				{ label: '1080p', value: '1080p' },
 			],
 			default: '720p',
+			unsupportedInCloud: true,
 		},
 	],
 }

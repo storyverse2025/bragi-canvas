@@ -11,6 +11,7 @@ const VEO_PARAMS = [
 			{ label: '8s', value: '8' },
 		],
 		default: '6',
+		unsupportedInCloud: true,
 	},
 	{
 		id: 'aspectRatio',
@@ -31,6 +32,7 @@ const VEO_PARAMS = [
 			{ label: '1080p', value: '1080p' },
 		],
 		default: '720p',
+		unsupportedInCloud: true,
 	},
 ]
 

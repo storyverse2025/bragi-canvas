@@ -50,6 +50,7 @@ export const gptImage: ModelConfig = {
 				{ label: '4K', value: '4K' },
 			],
 			default: '2K',
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'quality',
@@ -62,6 +63,7 @@ export const gptImage: ModelConfig = {
 				{ label: 'High', value: 'high' },
 			],
 			default: 'auto',
+			unsupportedInCloud: true,
 		},
 	],
 }

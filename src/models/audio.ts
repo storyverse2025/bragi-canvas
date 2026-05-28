@@ -143,6 +143,7 @@ export const elevenLabsTTS: ModelConfig = {
 			max: 1,
 			step: 0.05,
 			default: 0.5,
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'similarity_boost',
@@ -152,6 +153,7 @@ export const elevenLabsTTS: ModelConfig = {
 			max: 1,
 			step: 0.05,
 			default: 0.75,
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'style',
@@ -161,6 +163,7 @@ export const elevenLabsTTS: ModelConfig = {
 			max: 1,
 			step: 0.05,
 			default: 0,
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'speed',
@@ -308,6 +311,7 @@ export const grokTTS: ModelConfig = {
 				{ label: 'Portuguese (BR)', value: 'pt-BR' },
 			],
 			default: 'auto',
+			unsupportedInCloud: true,
 		},
 	],
 }

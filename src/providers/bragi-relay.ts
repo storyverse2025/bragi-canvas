@@ -6,6 +6,16 @@ import type { BragiSettings } from '../settings'
  * Built-in Bragi temporary storage — the plugin ships with this endpoint + token so users
  * don't have to deploy their own worker. All reference-image / audio uploads
  * from Seedance, fal, STT, and audio-isolation flow through here.
+ *
+ * SECURITY / V1 KNOWN ISSUE (predates PR #3 Cloud Mode work):
+ * This bearer is a **public anonymous credential** for an open temporary-storage
+ * worker, not a secret — anyone with the plugin source has it. It only grants
+ * write access to a TTL-bound (~24h) public bucket; no PII or persistent state
+ * sits behind it. Cloud Mode does NOT use this relay (its uploads go through
+ * `/v1/uploads` on the Storyverse router with a per-user svsk- token).
+ *
+ * V2 follow-up: replace with server-issued short-lived tokens (or move ref uploads
+ * onto the router for all flows). Tracked outside this PR's scope.
  */
 export const BUILTIN_BRAGI_RELAY: BragiRelayConfig = {
 	endpoint: 'https://temp.bragi.now',

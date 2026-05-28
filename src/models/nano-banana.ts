@@ -51,6 +51,7 @@ export const nanoBananaPro: ModelConfig = {
 				{ label: '4K', value: '4K' },
 			],
 			default: '1K',
+			unsupportedInCloud: true,
 		},
 	],
 }
@@ -86,6 +87,7 @@ export const nanoBanana2: ModelConfig = {
 				{ label: '4K', value: '4K' },
 			],
 			default: '1K',
+			unsupportedInCloud: true,
 		},
 	],
 }

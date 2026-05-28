@@ -30,6 +30,14 @@ export interface ModelParam {
 	max?: number
 	step?: number
 	unit?: string   // e.g. 's' for seconds
+	/**
+	 * When true, this param is hidden from the panel UI in Cloud Mode and is
+	 * NOT filled into `paramValues` — preventing the plugin from quietly sending
+	 * (or defaulting to) a value the V1 router schema doesn't carry. Local Mode
+	 * is unaffected. The storyverse provider also throws defensively if any such
+	 * field reaches it (e.g. via MCP), so the contract holds end-to-end.
+	 */
+	unsupportedInCloud?: boolean
 }
 
 /**

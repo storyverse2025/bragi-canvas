@@ -27,6 +27,7 @@ export const midjourneyV8: ModelConfig = {
 				{ label: '21:9', value: '21:9' },
 			],
 			default: '1:1',
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'quality',
@@ -46,6 +47,7 @@ export const midjourneyV8: ModelConfig = {
 			max: 1000,
 			step: 50,
 			default: 100,
+			unsupportedInCloud: true,
 		},
 	],
 }
@@ -74,6 +76,7 @@ export const midjourneyNiji7: ModelConfig = {
 				{ label: '2:3', value: '2:3' },
 			],
 			default: '1:1',
+			unsupportedInCloud: true,
 		},
 		{
 			id: 'stylize',
@@ -83,6 +86,7 @@ export const midjourneyNiji7: ModelConfig = {
 			max: 1000,
 			step: 50,
 			default: 100,
+			unsupportedInCloud: true,
 		},
 	],
 }
