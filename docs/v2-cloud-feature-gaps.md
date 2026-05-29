@@ -85,6 +85,7 @@ V2 PRs should:
 | `BUILTIN_BRAGI_RELAY.token` hardcoded in client | `src/providers/bragi-relay.ts` (predates Cloud Mode) | Move all ref uploads to router's `/v1/uploads` (already used by Cloud Mode) and retire the temp.bragi.now public-anonymous worker; or issue per-request short-lived tokens server-side |
 | `bragiToken` + provider API keys stored plaintext in `data.json` | Obsidian plugin storage convention | Encrypt at rest (OS keychain or libsodium with vault-bound key); document in plugin settings |
 | `console.error(prefix, err)` in `main.ts` logs raw Error objects to DevTools console | 9 sites in `main.ts` | Wrap Notice + console.error in a `safeReport(err)` helper that runs `sanitizeRouterMessage` on the message. Router-origin errors are already sanitized at throw time, but non-router errors (network, plugin's own preconditions) can carry URLs/paths. Devtools-opened users only; no tokens (those live in headers, not Error.message) |
+| `/v1/auth/check` echoes the svsk- token in its response body as `label` | `server/src/routes/auth.ts:24` (`return c.json({ ok: true, label: token })`) | Plugin already drops `label` from the user-facing Notice (R3 — `testStoryverseAuth` returns generic "Token OK"), so the user doesn't see it. But the token still appears on the wire / in reverse-proxy logs / DevTools Network panel. Server-side fix: return `{ ok: true }` or `{ ok: true, label: hashPrefix(token, 8) }` (short non-reversible identifier for support-channel matching). Small standalone server PR — same shape as PR #2's rename |
 
 ## Observability follow-ups
 
@@ -112,5 +113,6 @@ To keep V2 PRs reviewable, split by surface area rather than by feature:
 6. **`feat(server): access log middleware + request_id`** — observability sweep
 7. **`refactor(plugin): replace BUILTIN_BRAGI_RELAY with router /v1/uploads`** — security
 8. **`feat(plugin): encrypt-at-rest for bragiToken + provider keys`** — security
+9. **`fix(server): /v1/auth/check no longer echoes raw svsk- token`** — small standalone fix, drop or hash the `label` field (same shape as PR #2's rename, ~5 min)
 
 Each V2 PR should remove the relevant `unsupportedInCloud` / `unsupportedCloudModes` flags as the last step, so the integration invariant tests automatically validate the new coverage.
