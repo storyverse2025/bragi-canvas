@@ -144,6 +144,24 @@ function catalogProviderFor(_model: ModelConfig, activeProvider: string): string
 	return activeProvider
 }
 
+/**
+ * Strip params flagged `unsupportedInCloud:true` from a persisted lastSelection
+ * before merging it into paramValues. Without this, data.json's lastVideo / lastImage
+ * etc. from a prior Local Mode session would silently rehydrate `mode:'std'`,
+ * `imageSize:'1K'`, … into Cloud Mode — bypassing the panel's UI hide and tripping
+ * `refuseCloudUnsupportedParams` at the provider entry. Local Mode is a no-op.
+ */
+function filterCloudUnsupportedKeys(model: ModelConfig | null, source: Record<string, unknown>, settings: BragiSettings): Record<string, unknown> {
+	if (!model || settings.generationMode !== 'cloud') return source
+	const blocked = new Set(model.params.filter(p => p.unsupportedInCloud).map(p => p.id))
+	if (blocked.size === 0) return source
+	const out: Record<string, unknown> = {}
+	for (const [k, v] of Object.entries(source)) {
+		if (!blocked.has(k)) out[k] = v
+	}
+	return out
+}
+
 function voiceConfigFor(model: ModelConfig | null, settings: BragiSettings): { builtin: boolean; clone: boolean; design: boolean } {
 	// Cloud Mode: storyverse provider has no cloneVoice/designVoice implementation
 	// (router has no voice-clone/design endpoints in V1). Force-disable both so the
@@ -855,9 +873,12 @@ export function showGenerateBar(
 		initDefaults()
 		rebuildModeList()
 
-		// Restore saved params AFTER initDefaults (which resets to defaults)
+		// Restore saved params AFTER initDefaults (which resets to defaults).
+		// Cloud Mode: strip params that were persisted from a prior Local-mode session
+		// but are now hidden from the UI — otherwise the provider would receive (and refuse) them.
 		if (savedParams) {
-			paramValues = { ...paramValues, ...savedParams }
+			const filtered = filterCloudUnsupportedKeys(selectedModel, savedParams, settings)
+			paramValues = { ...paramValues, ...filtered }
 			applyInitialVoiceModeDefaults()
 		}
 
