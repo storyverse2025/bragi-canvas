@@ -9,6 +9,7 @@ import { getModelById, getActiveProvider, getEnabledModels } from './models/inde
 import { getTextInputCapability, listSupportedInputLabels, listUnsupportedInputLabels } from './models/text-input-capabilities'
 import { getConfiguredProviderIds } from './providers/registry'
 import type { GenerationType, Mode } from './models/types'
+import { cloudEffectiveModes, cloudEffectiveOptions, cloudEffectiveMax, cloudEffectiveDefault, isParamHiddenInCloud } from './models/cloud-overrides'
 import { getUpstreamInputs } from './edge-parser'
 import { getOrderedTextRefs } from './text-refs'
 import { getOrderedImages } from './ref-thumbnails'
@@ -440,24 +441,32 @@ export function createMcpToolRegistry(ctx: McpToolContext): McpToolDef[] {
 						const capability = m.type === 'text'
 							? getTextInputCapability(m.id, provider, apiModelId)
 							: null
+						// Cloud-aware view: hide modes / params the V1 router schema can't carry,
+						// and substitute cloudOptions / cloudDefault / cloudMax so the MCP caller
+						// sees the same surface as the panel UI.
+						const visibleParams = m.params.filter(p => !isParamHiddenInCloud(p, settings))
 						result.push({
 							id: m.id,
 							name: m.name,
 							type: m.type,
 							provider,
-							modes: m.modes,
+							modes: cloudEffectiveModes(m, settings),
 							...(capability ? {
 								supportedInputs: listSupportedInputLabels(capability),
 								unsupportedInputs: listUnsupportedInputLabels(capability),
 							} : {}),
-							params: m.params.map(p => ({
-								id: p.id,
-								label: p.label,
-								type: p.type,
-								default: p.default,
-								...(p.options ? { options: p.options } : {}),
-								...(p.min !== undefined ? { min: p.min, max: p.max, step: p.step, unit: p.unit } : {}),
-							})),
+							params: visibleParams.map(p => {
+								const opts = cloudEffectiveOptions(p, settings)
+								const mx = cloudEffectiveMax(p, settings)
+								return {
+									id: p.id,
+									label: p.label,
+									type: p.type,
+									default: cloudEffectiveDefault(p, settings),
+									...(opts ? { options: opts } : {}),
+									...(p.min !== undefined ? { min: p.min, max: mx, step: p.step, unit: p.unit } : {}),
+								}
+							}),
 						})
 					}
 				}
@@ -527,13 +536,25 @@ export function createMcpToolRegistry(ctx: McpToolContext): McpToolDef[] {
 				}
 				if (!prompt) throw new Error('Node contains no prompt text')
 
-				// Resolve params with defaults
+				// Resolve params with defaults — Cloud Mode skips params the panel hides
+				// (don't fill an unsupportedInCloud field; the storyverse provider would
+				// then refuse it). cloudEffectiveDefault returns cloudDefault if set so
+				// the value lands inside the router-accepted enum (e.g. grok-tts voice
+				// 'eve' default → 'alloy' in cloud).
 				const resolvedParams: Record<string, string | number> = { ...(params || {}) }
 				for (const p of model.params) {
-					resolvedParams[p.id] = resolvedParams[p.id] ?? p.default
+					if (isParamHiddenInCloud(p, settings)) {
+						// Don't fill — and if the caller passed an explicit value, drop it too.
+						delete resolvedParams[p.id]
+						continue
+					}
+					resolvedParams[p.id] = resolvedParams[p.id] ?? cloudEffectiveDefault(p, settings)
 				}
 
-				const selectedMode = (mode as Mode) || model.modes[0] || null
+				// Mode default also respects unsupportedCloudModes — pick the first cloud-effective
+				// mode rather than the raw first one (which might be a hidden mode).
+				const effectiveModes = cloudEffectiveModes(model, settings)
+				const selectedMode = (mode as Mode) || effectiveModes[0] || model.modes[0] || null
 
 				const panelResult: PanelResult = {
 					prompt,

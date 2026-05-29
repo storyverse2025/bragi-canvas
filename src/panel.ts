@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- Obsidian Canvas internals and provider payloads are runtime-shaped data that this plugin narrows at use sites. */
 import { Notice, App } from 'obsidian'
-import type { ModelConfig, GenerationType, Mode, ModelParam, ParamOption, VoiceSourceMode } from './models/types'
+import type { ModelConfig, GenerationType, Mode, ModelParam, VoiceSourceMode } from './models/types'
+import { cloudEffectiveModes, cloudEffectiveOptions, cloudEffectiveMax, cloudEffectiveDefault } from './models/cloud-overrides'
 import { getEnabledModels, getActiveProvider } from './models/index'
 import { getTextInputCapability, textInputKindSupported } from './models/text-input-capabilities'
 import { getConfiguredProviderIds } from './providers/registry'
@@ -152,21 +153,12 @@ function catalogProviderFor(_model: ModelConfig, activeProvider: string): string
  * `imageSize:'1K'`, … into Cloud Mode — bypassing the panel's UI hide and tripping
  * `refuseCloudUnsupportedParams` at the provider entry. Local Mode is a no-op.
  */
-/** Cloud-aware view of a param's `options` (UI choices). Local Mode → param.options as-is. */
-function paramOptions(param: ModelParam, settings: BragiSettings): ParamOption[] | undefined {
-	if (settings.generationMode === 'cloud' && param.cloudOptions) return param.cloudOptions
-	return param.options
-}
-/** Cloud-aware view of a param's `max` (range upper bound). */
-function paramMax(param: ModelParam, settings: BragiSettings): number | undefined {
-	if (settings.generationMode === 'cloud' && param.cloudMax !== undefined) return param.cloudMax
-	return param.max
-}
-/** Cloud-aware view of a param's `default`. */
-function paramDefault(param: ModelParam, settings: BragiSettings): string | number {
-	if (settings.generationMode === 'cloud' && param.cloudDefault !== undefined) return param.cloudDefault
-	return param.default
-}
+// Cloud-aware helpers are shared with src/mcp-tool-registry.ts via models/cloud-overrides —
+// keep the call-site names but delegate to the shared implementation so the two entry points
+// (panel UI + MCP tool) never drift.
+const paramOptions = cloudEffectiveOptions
+const paramMax = cloudEffectiveMax
+const paramDefault = cloudEffectiveDefault
 
 function filterCloudUnsupportedKeys(model: ModelConfig | null, source: Record<string, unknown>, settings: BragiSettings): Record<string, unknown> {
 	if (!model || settings.generationMode !== 'cloud') return source
@@ -833,19 +825,24 @@ export function showGenerateBar(
 		if (m.type === 'text') return textUpstreamIssue(m) === null
 		// Image models — always compatible for now
 		if (m.type !== 'video') return true
+		// Use cloud-effective modes so the model-picker doesn't mark a model as "compatible
+		// with upstream X" when the only matching mode is hidden in Cloud Mode (e.g. Veo
+		// first-frame, seedance video-ref). Otherwise the user picks it expecting it to
+		// work, then the runtime refuses.
+		const modes = cloudEffectiveModes(m, settings)
 		// No special inputs — only text-to-video models can run without refs.
-		if (upstreamImageCount === 0 && upstreamVideoCount === 0) return m.modes.includes('text-to-video')
+		if (upstreamImageCount === 0 && upstreamVideoCount === 0) return modes.includes('text-to-video')
 		// Has video input — needs a video-input mode
 		if (upstreamVideoCount > 0) {
-			return m.modes.includes('video-ref') || m.modes.includes('video-extend') || m.modes.includes('video-edit')
+			return modes.includes('video-ref') || modes.includes('video-extend') || modes.includes('video-edit')
 		}
 		// Has 2+ images — needs first-last-frame, multi-image-ref, or image-ref
 		if (upstreamImageCount >= 2) {
-			return m.modes.includes('first-last-frame') || m.modes.includes('multi-image-ref') || m.modes.includes('image-ref')
+			return modes.includes('first-last-frame') || modes.includes('multi-image-ref') || modes.includes('image-ref')
 		}
 		// Has 1 image — needs first-frame or image-ref
 		if (upstreamImageCount === 1) {
-			return m.modes.includes('first-frame') || m.modes.includes('image-ref')
+			return modes.includes('first-frame') || modes.includes('image-ref')
 		}
 		return true
 	}

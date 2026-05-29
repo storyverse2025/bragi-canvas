@@ -47,6 +47,10 @@ export const grokImagine: ModelConfig = {
 				{ label: 'Normal', value: 'normal' },
 			],
 			default: 'quality',
+			// Router /v1/images/generations schema for grok-imagine accepts only
+			// { prompt, aspectRatio } — no `quality` field. The storyverse provider also
+			// doesn't forward it. Hide in cloud so the choice isn't silently dropped.
+			unsupportedInCloud: true,
 		},
 	],
 }
