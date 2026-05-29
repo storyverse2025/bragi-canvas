@@ -40,3 +40,57 @@ export function cloudEffectiveDefault(param: ModelParam, settings: BragiSettings
 export function isParamHiddenInCloud(param: ModelParam, settings: BragiSettings): boolean {
 	return settings.generationMode === 'cloud' && !!param.unsupportedInCloud
 }
+
+/** True iff `mode` is selectable for `model` in the current mode (cloud filters unsupportedCloudModes). */
+export function isModeAllowed(model: ModelConfig, mode: Mode, settings: BragiSettings): boolean {
+	return cloudEffectiveModes(model, settings).includes(mode)
+}
+
+/**
+ * Normalize a single caller-supplied / persisted param value against the cloud-effective
+ * options / max / hidden flag.
+ *
+ *  - hidden in cloud (unsupportedInCloud)               → undefined (drop)
+ *  - select & value not in cloudEffectiveOptions        → undefined (drop / let caller default-fill)
+ *  - range/number & value > cloudMax                    → clamped to cloudMax
+ *  - range/number & value < min                          → clamped to min
+ *  - anything else                                       → value as-is (or string→number coerced for ranges)
+ *
+ * Local Mode: only clamps numeric range to its plain `max` / `min`; otherwise pass-through.
+ *
+ * Callers decide how to react to `undefined`:
+ *   - panel rehydrate (lastSelection): silent — let initDefaults fill the cloud-effective default
+ *   - MCP generate: throw a clear error so scripted callers know their value was rejected
+ */
+export function normalizeCloudParamValue(
+	param: ModelParam,
+	value: unknown,
+	settings: BragiSettings,
+): string | number | undefined {
+	const cloud = settings.generationMode === 'cloud'
+	if (cloud && param.unsupportedInCloud) return undefined
+
+	// Select / dropdown: value must be one of the (cloud-effective) options
+	if (param.type === 'select' || param.options) {
+		const opts = cloudEffectiveOptions(param, settings)
+		if (!opts) return undefined
+		const strVal = typeof value === 'string' ? value
+			: typeof value === 'number' || typeof value === 'boolean' ? String(value)
+			: ''
+		return opts.some(o => o.value === strVal) ? strVal : undefined
+	}
+
+	// Range / number: clamp to (cloud-effective) max / plain min
+	const mx = cloudEffectiveMax(param, settings) ?? param.max
+	const mn = param.min
+	let n: number | undefined
+	if (typeof value === 'number' && Number.isFinite(value)) n = value
+	else if (typeof value === 'string') {
+		const parsed = parseFloat(value)
+		if (Number.isFinite(parsed)) n = parsed
+	}
+	if (n === undefined) return undefined
+	if (mx !== undefined && n > mx) return mx
+	if (mn !== undefined && n < mn) return mn
+	return n
+}

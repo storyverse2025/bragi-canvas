@@ -9,7 +9,7 @@ import { getModelById, getActiveProvider, getEnabledModels } from './models/inde
 import { getTextInputCapability, listSupportedInputLabels, listUnsupportedInputLabels } from './models/text-input-capabilities'
 import { getConfiguredProviderIds } from './providers/registry'
 import type { GenerationType, Mode } from './models/types'
-import { cloudEffectiveModes, cloudEffectiveOptions, cloudEffectiveMax, cloudEffectiveDefault, isParamHiddenInCloud } from './models/cloud-overrides'
+import { cloudEffectiveModes, cloudEffectiveOptions, cloudEffectiveMax, cloudEffectiveDefault, isParamHiddenInCloud, isModeAllowed, normalizeCloudParamValue } from './models/cloud-overrides'
 import { getUpstreamInputs } from './edge-parser'
 import { getOrderedTextRefs } from './text-refs'
 import { getOrderedImages } from './ref-thumbnails'
@@ -536,25 +536,49 @@ export function createMcpToolRegistry(ctx: McpToolContext): McpToolDef[] {
 				}
 				if (!prompt) throw new Error('Node contains no prompt text')
 
-				// Resolve params with defaults — Cloud Mode skips params the panel hides
-				// (don't fill an unsupportedInCloud field; the storyverse provider would
-				// then refuse it). cloudEffectiveDefault returns cloudDefault if set so
-				// the value lands inside the router-accepted enum (e.g. grok-tts voice
-				// 'eve' default → 'alloy' in cloud).
+				// Mode default respects unsupportedCloudModes. If the caller explicitly passes a
+				// mode that isn't cloud-effective for this model, refuse clearly instead of
+				// quietly running with a different mode (R7: previously `mode || effectiveModes[0]`
+				// would let veo first-frame / seedance video-ref / grok-video text-to-video sneak
+				// past in Cloud Mode).
+				const effectiveModes = cloudEffectiveModes(model, settings)
+				if (mode && !isModeAllowed(model, mode as Mode, settings)) {
+					throw new Error(
+						`Mode "${mode}" is not supported in Cloud Mode for ${model.id}. ` +
+						`Available: ${effectiveModes.join(', ') || '(none)'}`,
+					)
+				}
+				const selectedMode = (mode as Mode) || effectiveModes[0] || model.modes[0] || null
+
+				// Resolve params:
+				//  - hidden in cloud → drop (panel also hides them)
+				//  - caller supplied a value → normalize against cloud-effective options/max;
+				//    if normalize returns undefined the value is unrecoverable (e.g. select
+				//    not in cloudOptions) → throw clearly so the caller knows their UI choice
+				//    won't be silently downgraded
+				//  - no value supplied → fill cloudEffectiveDefault
 				const resolvedParams: Record<string, string | number> = { ...(params || {}) }
 				for (const p of model.params) {
 					if (isParamHiddenInCloud(p, settings)) {
-						// Don't fill — and if the caller passed an explicit value, drop it too.
 						delete resolvedParams[p.id]
 						continue
 					}
-					resolvedParams[p.id] = resolvedParams[p.id] ?? cloudEffectiveDefault(p, settings)
+					const provided = resolvedParams[p.id]
+					if (provided !== undefined) {
+						const norm = normalizeCloudParamValue(p, provided, settings)
+						if (norm === undefined) {
+							const opts = cloudEffectiveOptions(p, settings)
+							const optList = opts ? opts.map(o => o.value).join(', ') : ''
+							throw new Error(
+								`Parameter "${p.id}"=${JSON.stringify(provided)} is not supported in Cloud Mode for ${model.id}` +
+								(optList ? `. Allowed values: ${optList}` : '. (cloud-unsupported field)'),
+							)
+						}
+						resolvedParams[p.id] = norm
+					} else {
+						resolvedParams[p.id] = cloudEffectiveDefault(p, settings)
+					}
 				}
-
-				// Mode default also respects unsupportedCloudModes — pick the first cloud-effective
-				// mode rather than the raw first one (which might be a hidden mode).
-				const effectiveModes = cloudEffectiveModes(model, settings)
-				const selectedMode = (mode as Mode) || effectiveModes[0] || model.modes[0] || null
 
 				const panelResult: PanelResult = {
 					prompt,

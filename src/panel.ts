@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- Obsidian Canvas internals and provider payloads are runtime-shaped data that this plugin narrows at use sites. */
 import { Notice, App } from 'obsidian'
 import type { ModelConfig, GenerationType, Mode, ModelParam, VoiceSourceMode } from './models/types'
-import { cloudEffectiveModes, cloudEffectiveOptions, cloudEffectiveMax, cloudEffectiveDefault } from './models/cloud-overrides'
+import { cloudEffectiveModes, cloudEffectiveOptions, cloudEffectiveMax, cloudEffectiveDefault, normalizeCloudParamValue } from './models/cloud-overrides'
 import { getEnabledModels, getActiveProvider } from './models/index'
 import { getTextInputCapability, textInputKindSupported } from './models/text-input-capabilities'
 import { getConfiguredProviderIds } from './providers/registry'
@@ -146,13 +146,6 @@ function catalogProviderFor(_model: ModelConfig, activeProvider: string): string
 	return activeProvider
 }
 
-/**
- * Strip params flagged `unsupportedInCloud:true` from a persisted lastSelection
- * before merging it into paramValues. Without this, data.json's lastVideo / lastImage
- * etc. from a prior Local Mode session would silently rehydrate `mode:'std'`,
- * `imageSize:'1K'`, … into Cloud Mode — bypassing the panel's UI hide and tripping
- * `refuseCloudUnsupportedParams` at the provider entry. Local Mode is a no-op.
- */
 // Cloud-aware helpers are shared with src/mcp-tool-registry.ts via models/cloud-overrides —
 // keep the call-site names but delegate to the shared implementation so the two entry points
 // (panel UI + MCP tool) never drift.
@@ -160,13 +153,28 @@ const paramOptions = cloudEffectiveOptions
 const paramMax = cloudEffectiveMax
 const paramDefault = cloudEffectiveDefault
 
+/**
+ * Sanitize a persisted lastSelection against cloud-effective constraints before
+ * merging it into paramValues. Three concerns:
+ *  1. drop keys whose param is `unsupportedInCloud:true`
+ *  2. drop select values that aren't in the cloud-effective options
+ *     (e.g. lastImage.aspectRatio='4:3' for gpt-image-2 cloud, which accepts
+ *     only 1:1/16:9/9:16 — otherwise aspectToSize silently maps to 1024x1024)
+ *  3. clamp range values that exceed cloudMax
+ *     (e.g. lastAudio.music_length_ms=250 → 180 so duration_ms 180000 stays
+ *     under the router's cap; slider thumb also lines up with cloud cloudMax)
+ *
+ * Local Mode is a no-op. Non-ModelParam fields (voiceLabel, voiceMode, …) pass through.
+ */
 function filterCloudUnsupportedKeys(model: ModelConfig | null, source: Record<string, unknown>, settings: BragiSettings): Record<string, unknown> {
 	if (!model || settings.generationMode !== 'cloud') return source
-	const blocked = new Set(model.params.filter(p => p.unsupportedInCloud).map(p => p.id))
-	if (blocked.size === 0) return source
+	const byId = new Map(model.params.map(p => [p.id, p]))
 	const out: Record<string, unknown> = {}
 	for (const [k, v] of Object.entries(source)) {
-		if (!blocked.has(k)) out[k] = v
+		const param = byId.get(k)
+		if (!param) { out[k] = v; continue }
+		const norm = normalizeCloudParamValue(param, v, settings)
+		if (norm !== undefined) out[k] = norm
 	}
 	return out
 }
