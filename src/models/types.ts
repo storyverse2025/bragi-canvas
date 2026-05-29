@@ -38,6 +38,27 @@ export interface ModelParam {
 	 * field reaches it (e.g. via MCP), so the contract holds end-to-end.
 	 */
 	unsupportedInCloud?: boolean
+	/**
+	 * Override `options` in Cloud Mode. Use when the plugin UI exposes more / different
+	 * values than the V1 router schema accepts (e.g. nano-banana's plugin aspectRatio
+	 * includes 3:2/21:9/4:5/5:4/etc but the router enum is just 1:1/16:9/9:16/4:3/3:4).
+	 * Required to be a subset/intersection of `options` (enforced by integration invariant).
+	 * Local Mode is unaffected.
+	 */
+	cloudOptions?: ParamOption[]
+	/**
+	 * Override `max` for `range` params in Cloud Mode. Use when the router schema
+	 * caps the value lower than the plugin UI (e.g. elevenlabs-sfx duration UI=30s,
+	 * router=22s; elevenlabs-music UI=300s, router=180s).
+	 */
+	cloudMax?: number
+	/**
+	 * Override `default` in Cloud Mode. Use when the plugin default isn't in the
+	 * router's accepted set (e.g. grok-tts default voice 'eve' isn't in the OpenAI-style
+	 * enum the router expects). Required to be in `cloudOptions` (or `options` if
+	 * `cloudOptions` isn't set), enforced by integration invariant.
+	 */
+	cloudDefault?: string | number
 }
 
 /**

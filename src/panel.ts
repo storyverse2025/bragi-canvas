@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- Obsidian Canvas internals and provider payloads are runtime-shaped data that this plugin narrows at use sites. */
 import { Notice, App } from 'obsidian'
-import type { ModelConfig, GenerationType, Mode, ModelParam, VoiceSourceMode } from './models/types'
+import type { ModelConfig, GenerationType, Mode, ModelParam, ParamOption, VoiceSourceMode } from './models/types'
 import { getEnabledModels, getActiveProvider } from './models/index'
 import { getTextInputCapability, textInputKindSupported } from './models/text-input-capabilities'
 import { getConfiguredProviderIds } from './providers/registry'
@@ -77,6 +77,7 @@ function renderRangeParamDropdown(
 	paramsEl: HTMLElement,
 	param: ModelParam,
 	paramValues: Record<string, string | number>,
+	settings: BragiSettings,
 ): void {
 	const details = createEl('details')
 	details.className = 'bragi-bar-range-menu'
@@ -94,9 +95,9 @@ function renderRangeParamDropdown(
 	const range = createEl('input')
 	range.type = 'range'
 	range.min = String(param.min ?? 0)
-	range.max = String(param.max ?? 100)
+	range.max = String(paramMax(param, settings) ?? 100)
 	range.step = String(param.step ?? 1)
-	range.value = String(paramValues[param.id] ?? param.default)
+	range.value = String(paramValues[param.id] ?? paramDefault(param, settings))
 	range.title = param.label
 
 	const valueLabel = createSpan()
@@ -151,6 +152,22 @@ function catalogProviderFor(_model: ModelConfig, activeProvider: string): string
  * `imageSize:'1K'`, … into Cloud Mode — bypassing the panel's UI hide and tripping
  * `refuseCloudUnsupportedParams` at the provider entry. Local Mode is a no-op.
  */
+/** Cloud-aware view of a param's `options` (UI choices). Local Mode → param.options as-is. */
+function paramOptions(param: ModelParam, settings: BragiSettings): ParamOption[] | undefined {
+	if (settings.generationMode === 'cloud' && param.cloudOptions) return param.cloudOptions
+	return param.options
+}
+/** Cloud-aware view of a param's `max` (range upper bound). */
+function paramMax(param: ModelParam, settings: BragiSettings): number | undefined {
+	if (settings.generationMode === 'cloud' && param.cloudMax !== undefined) return param.cloudMax
+	return param.max
+}
+/** Cloud-aware view of a param's `default`. */
+function paramDefault(param: ModelParam, settings: BragiSettings): string | number {
+	if (settings.generationMode === 'cloud' && param.cloudDefault !== undefined) return param.cloudDefault
+	return param.default
+}
+
 function filterCloudUnsupportedKeys(model: ModelConfig | null, source: Record<string, unknown>, settings: BragiSettings): Record<string, unknown> {
 	if (!model || settings.generationMode !== 'cloud') return source
 	const blocked = new Set(model.params.filter(p => p.unsupportedInCloud).map(p => p.id))
@@ -545,11 +562,11 @@ export function showGenerateBar(
 			// provider never sees those fields and we can't silently downgrade.
 			if (settings.generationMode === 'cloud' && p.unsupportedInCloud) continue
 			// Keep current value if same param exists and value is valid in new model
-			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (p.options?.length || 0) === 0
-			if (prev[p.id] !== undefined && (canKeepDynamicVoice || p.options?.some(o => o.value === String(prev[p.id])))) {
+			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (paramOptions(p, settings)?.length || 0) === 0
+			if (prev[p.id] !== undefined && (canKeepDynamicVoice || paramOptions(p, settings)?.some(o => o.value === String(prev[p.id])))) {
 				paramValues[p.id] = prev[p.id]
 			} else {
-				paramValues[p.id] = p.default
+				paramValues[p.id] = paramDefault(p, settings)
 			}
 		}
 		if (preserveDynamicVoice && typeof prev.voiceLabel === 'string') paramValues.voiceLabel = prev.voiceLabel
@@ -685,14 +702,14 @@ export function showGenerateBar(
 		for (const param of selectedModel.params) {
 			// Hide UI controls that the V1 router schema doesn't carry. Local Mode is unaffected.
 			if (settings.generationMode === 'cloud' && param.unsupportedInCloud) continue
-			if (param.type === 'select' && param.options) {
+			if (param.type === 'select' && paramOptions(param, settings)) {
 				// Pick mode-specific options if declared; otherwise the base list.
-				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || param.options
+				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || paramOptions(param, settings) || []
 
 				// If current value isn't valid in the new option set, snap back to default.
-				const currentValue = String(paramValues[param.id] ?? param.default)
+				const currentValue = String(paramValues[param.id] ?? paramDefault(param, settings))
 				const valid = effectiveOptions.some(o => o.value === currentValue)
-				if (!valid && param.id !== 'voice') paramValues[param.id] = param.default
+				if (!valid && param.id !== 'voice') paramValues[param.id] = paramDefault(param, settings)
 
 				if (param.id === 'voice') {
 					const config = voiceConfigFor(selectedModel, settings)
@@ -724,7 +741,7 @@ export function showGenerateBar(
 					button.title = param.label
 					button.disabled = (config.clone || config.design) && !config.builtin
 					const updateLabel = () => {
-						button.textContent = voiceDisplayLabel(paramValues, effectiveOptions, param.default)
+						button.textContent = voiceDisplayLabel(paramValues, effectiveOptions, paramDefault(param, settings))
 					}
 					updateLabel()
 					button.addEventListener('click', () => {
@@ -762,7 +779,7 @@ export function showGenerateBar(
 					optEl.textContent = opt.label
 					select.appendChild(optEl)
 				}
-				select.value = String(paramValues[param.id] ?? param.default)
+				select.value = String(paramValues[param.id] ?? paramDefault(param, settings))
 				select.addEventListener('change', () => {
 					paramValues[param.id] = select.value
 					updateRunState()
@@ -770,16 +787,16 @@ export function showGenerateBar(
 				paramsEl.appendChild(select)
 				autoSizeSelect(select)
 			} else if (param.type === 'range') {
-				renderRangeParamDropdown(paramsEl, param, paramValues)
+				renderRangeParamDropdown(paramsEl, param, paramValues, settings)
 			} else if (param.type === 'number') {
 				const input = createEl('input')
 				input.type = 'number'
 				input.className = 'bragi-bar-number'
 				input.title = param.label
 				if (param.min !== undefined) input.min = String(param.min)
-				if (param.max !== undefined) input.max = String(param.max)
+				{ const _m = paramMax(param, settings); if (_m !== undefined) input.max = String(_m) }
 				if (param.step !== undefined) input.step = String(param.step)
-				input.value = String(paramValues[param.id] ?? param.default)
+				input.value = String(paramValues[param.id] ?? paramDefault(param, settings))
 				input.addEventListener('change', () => {
 					const parsed = input.value.trim() ? parseFloat(input.value) : ''
 					paramValues[param.id] = typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : ''
@@ -1220,19 +1237,25 @@ export function showBatchGenerateBar(
 
 	function rebuildModeList() {
 		modeSelect.innerHTML = ''
-		if (!selectedModel || selectedModel.modes.length <= 1) {
+		if (!selectedModel) { modeSelect.classList.add('bragi-hidden'); selectedMode = null; return }
+
+		// Same Cloud-Mode hide as the main panel (mirror change in the regular rebuildModeList).
+		const unsupported = (settings.generationMode === 'cloud' && selectedModel.unsupportedCloudModes) || []
+		const visibleModes = selectedModel.modes.filter(m => !unsupported.includes(m))
+
+		if (visibleModes.length <= 1) {
 			modeSelect.classList.add('bragi-hidden')
-			selectedMode = selectedModel?.modes[0] || null
+			selectedMode = visibleModes[0] || null
 			return
 		}
 		modeSelect.classList.remove('bragi-hidden')
-		for (const mode of selectedModel.modes) {
+		for (const mode of visibleModes) {
 			const opt = createEl('option')
 			opt.value = mode
 			opt.textContent = MODE_LABELS[mode] || mode
 			modeSelect.appendChild(opt)
 		}
-		selectedMode = selectedModel.modes[0]
+		selectedMode = visibleModes[0]
 		modeSelect.value = selectedMode
 		resizeMode()
 	}
@@ -1244,11 +1267,11 @@ export function showBatchGenerateBar(
 		for (const p of selectedModel.params) {
 			// Cloud Mode: don't fill defaults for cloud-unsupported params (UI also hides them).
 			if (settings.generationMode === 'cloud' && p.unsupportedInCloud) continue
-			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (p.options?.length || 0) === 0
-			if (prev[p.id] !== undefined && (canKeepDynamicVoice || p.options?.some(o => o.value === String(prev[p.id])))) {
+			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (paramOptions(p, settings)?.length || 0) === 0
+			if (prev[p.id] !== undefined && (canKeepDynamicVoice || paramOptions(p, settings)?.some(o => o.value === String(prev[p.id])))) {
 				paramValues[p.id] = prev[p.id]
 			} else {
-				paramValues[p.id] = p.default
+				paramValues[p.id] = paramDefault(p, settings)
 			}
 		}
 		if (preserveDynamicVoice && typeof prev.voiceLabel === 'string') paramValues.voiceLabel = prev.voiceLabel
@@ -1260,10 +1283,10 @@ export function showBatchGenerateBar(
 		for (const param of selectedModel.params) {
 			// Hide UI controls that the V1 router schema doesn't carry. Local Mode is unaffected.
 			if (settings.generationMode === 'cloud' && param.unsupportedInCloud) continue
-			if (param.type === 'select' && param.options) {
-				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || param.options
-				const currentValue = String(paramValues[param.id] ?? param.default)
-				if (!effectiveOptions.some(o => o.value === currentValue) && param.id !== 'voice') paramValues[param.id] = param.default
+			if (param.type === 'select' && paramOptions(param, settings)) {
+				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || paramOptions(param, settings) || []
+				const currentValue = String(paramValues[param.id] ?? paramDefault(param, settings))
+				if (!effectiveOptions.some(o => o.value === currentValue) && param.id !== 'voice') paramValues[param.id] = paramDefault(param, settings)
 
 				if (param.id === 'voice') {
 						const config = voiceConfigFor(selectedModel, settings)
@@ -1274,7 +1297,7 @@ export function showBatchGenerateBar(
 						const updateLabel = () => {
 							button.textContent = (config.clone || config.design) && !config.builtin
 								? 'Single node only'
-								: voiceDisplayLabel(paramValues, effectiveOptions, param.default)
+								: voiceDisplayLabel(paramValues, effectiveOptions, paramDefault(param, settings))
 						}
 					updateLabel()
 					button.addEventListener('click', () => {
@@ -1312,21 +1335,21 @@ export function showBatchGenerateBar(
 					optEl.textContent = opt.label
 					select.appendChild(optEl)
 				}
-				select.value = String(paramValues[param.id] ?? param.default)
+				select.value = String(paramValues[param.id] ?? paramDefault(param, settings))
 				select.addEventListener('change', () => { paramValues[param.id] = select.value })
 				paramsEl.appendChild(select)
 				autoSizeSelect(select)
 			} else if (param.type === 'range') {
-				renderRangeParamDropdown(paramsEl, param, paramValues)
+				renderRangeParamDropdown(paramsEl, param, paramValues, settings)
 			} else if (param.type === 'number') {
 				const input = createEl('input')
 				input.type = 'number'
 				input.className = 'bragi-bar-number'
 				input.title = param.label
 				if (param.min !== undefined) input.min = String(param.min)
-				if (param.max !== undefined) input.max = String(param.max)
+				{ const _m = paramMax(param, settings); if (_m !== undefined) input.max = String(_m) }
 				if (param.step !== undefined) input.step = String(param.step)
-				input.value = String(paramValues[param.id] ?? param.default)
+				input.value = String(paramValues[param.id] ?? paramDefault(param, settings))
 				input.addEventListener('change', () => {
 					const parsed = input.value.trim() ? parseFloat(input.value) : ''
 					paramValues[param.id] = typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : ''

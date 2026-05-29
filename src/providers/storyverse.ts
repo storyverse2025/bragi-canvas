@@ -37,6 +37,20 @@ const VIDEO_MODELS_ACCEPTING_REFS = new Set([
 	'kling-2.6', 'kling-3.0', 'seedance-2.0', 'seedance-2.0-fast', 'grok-video',
 ])
 
+/** Per-model max input_assets length the router schema allows. Provider truncates+throws above this. */
+const INPUT_ASSETS_MAX: Record<string, number> = {
+	'gpt-image-2': 1,
+	'nano-banana-pro': 3,
+	'nano-banana-2': 3,
+	'seedream-4.5': 3,
+	'seedream-5.0': 3,
+	'kling-2.6': 2,
+	'kling-3.0': 2,
+	'seedance-2.0': 1,
+	'seedance-2.0-fast': 1,
+	'grok-video': 1,
+}
+
 /**
  * Defensive throw if any param flagged `unsupportedInCloud:true` on the model
  * definition (src/models/*.ts) reaches the provider. The panel hides these
@@ -50,6 +64,17 @@ const VIDEO_MODELS_ACCEPTING_REFS = new Set([
  * adding a new model with such a param automatically propagates here, with
  * no separate hand-written allowlist to keep in sync.
  */
+/** Throw if more refs are attached than the router schema accepts for this model. */
+function refuseTooManyRefs(modelId: string, refs: string[] | undefined): void {
+	if (!refs || refs.length === 0) return
+	const max = INPUT_ASSETS_MAX[modelId]
+	if (max === undefined || refs.length <= max) return
+	throw new Error(
+		`Storyverse: ${modelId} via Cloud Mode accepts at most ${max} reference asset${max === 1 ? '' : 's'} ` +
+		`(router schema limit); ${refs.length} attached. Detach extras or use Local Mode.`,
+	)
+}
+
 function refuseCloudUnsupportedParams(modelId: string, p: Record<string, unknown>): void {
 	const model = getModelById(modelId)
 	if (!model) return
@@ -279,6 +304,7 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 		const model = str(params.modelId)
 		refuseCloudUnsupportedParams(model, params)
 		const refs = IMAGE_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
+		refuseTooManyRefs(model, refs)
 		const inputAssets = await this.uploadAssets(refs)
 		const body = this.buildBody(model, prompt, params, inputAssets)
 		const resp = await this.postJson('/v1/images/generations', body)
@@ -312,11 +338,10 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 			case 'grok-imagine':
 				return { model, prompt, aspectRatio: str(p.aspectRatio, '1:1') }
 			case 'midjourney-v8':
-			case 'midjourney-niji-7': {
-				// Plugin quality is '1'/'4'; router enum is low|medium|high.
-				const quality = str(p.quality) === '4' ? 'high' : 'medium'
-				return { model, prompt, quality, ...(model === 'midjourney-niji-7' ? { niji: true } : {}) }
-			}
+			case 'midjourney-niji-7':
+				// cloud panel exposes medium/high directly via the param's cloudOptions+cloudDefault —
+				// no remap needed here. Local-mode midjourney would never reach this branch.
+				return { model, prompt, quality: str(p.quality, 'medium'), ...(model === 'midjourney-niji-7' ? { niji: true } : {}) }
 			default:
 				return { model, prompt, ...assets }
 		}
@@ -331,6 +356,7 @@ export class StoryverseVideoProvider extends StoryverseClient implements VideoPr
 		const model = str(params.modelId)
 		refuseCloudUnsupportedParams(model, params)
 		const refs = VIDEO_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
+		refuseTooManyRefs(model, refs)
 		const inputAssets = await this.uploadAssets(refs)
 		const body = this.buildBody(model, prompt, params, inputAssets)
 		const resp = await this.postJson('/v1/videos/generations', body)

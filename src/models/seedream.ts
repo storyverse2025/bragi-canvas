@@ -11,6 +11,11 @@ const SEEDREAM_RATIOS = [
 	{ label: '21:9', value: '21:9' },
 ]
 
+// Router /v1/images/generations seedream schema accepts only this subset.
+const SEEDREAM_CLOUD_RATIOS = SEEDREAM_RATIOS.filter(
+	(r) => ['1:1', '16:9', '9:16', '4:3', '3:4'].includes(r.value),
+)
+
 export const seedream5: ModelConfig = {
 	id: 'seedream-5.0',
 	name: 'Seedream 5.0',
@@ -27,6 +32,7 @@ export const seedream5: ModelConfig = {
 			type: 'select',
 			options: SEEDREAM_RATIOS,
 			default: '1:1',
+			cloudOptions: SEEDREAM_CLOUD_RATIOS,
 		},
 		{
 			id: 'resolution',
@@ -59,6 +65,7 @@ export const seedream45: ModelConfig = {
 			type: 'select',
 			options: SEEDREAM_RATIOS,
 			default: '1:1',
+			cloudOptions: SEEDREAM_CLOUD_RATIOS,
 		},
 		{
 			id: 'resolution',

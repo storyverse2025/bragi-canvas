@@ -173,6 +173,8 @@ export const elevenLabsTTS: ModelConfig = {
 			max: 1.2,
 			step: 0.05,
 			default: 1,
+			// Router /v1/audio/speech elevenlabs-tts-v3 schema has no `speed` field
+			unsupportedInCloud: true,
 		},
 	],
 	voiceConfig: { builtin: true, clone: true, design: false },
@@ -294,6 +296,17 @@ export const grokTTS: ModelConfig = {
 				{ label: 'Sal (M)', value: 'sal' },
 			],
 			default: 'eve',
+			// Router grok-tts voice enum is OpenAI-style (alloy/echo/...). The plugin's xAI-style
+			// names (eve/ara/...) are not accepted — show OpenAI names in cloud + change default.
+			cloudOptions: [
+				{ label: 'Alloy', value: 'alloy' },
+				{ label: 'Echo',  value: 'echo' },
+				{ label: 'Fable', value: 'fable' },
+				{ label: 'Onyx',  value: 'onyx' },
+				{ label: 'Nova',  value: 'nova' },
+				{ label: 'Shimmer', value: 'shimmer' },
+			],
+			cloudDefault: 'alloy',
 		},
 		{
 			id: 'language',
@@ -338,6 +351,8 @@ export const elevenLabsMusic: ModelConfig = {
 			step: 5,
 			unit: 's',
 			default: 30,
+			// Router schema caps duration_ms at 180000 (180s).
+			cloudMax: 180,
 		},
 		{
 			id: 'instrumental',
@@ -401,6 +416,14 @@ export const elevenLabsSFX: ModelConfig = {
 				{ label: '30s', value: '30' },
 			],
 			default: '5',
+			// Router schema duration_seconds max is 22 — drop 30s.
+			cloudOptions: [
+				{ label: '1s', value: '1' },
+				{ label: '3s', value: '3' },
+				{ label: '5s', value: '5' },
+				{ label: '10s', value: '10' },
+				{ label: '20s', value: '20' },
+			],
 		},
 	],
 }

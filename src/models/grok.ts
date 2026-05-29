@@ -23,6 +23,8 @@ export const grokImagine: ModelConfig = {
 		fal: { apiModelId: 'xai/grok-imagine-image' },
 	},
 	modes: ['text-to-image', 'image-ref-to-image'],
+	// Router grok-imagine schema has no input_assets → image-ref mode can't be served
+	unsupportedCloudModes: ['image-ref-to-image'],
 	params: [
 		{
 			id: 'aspectRatio',
@@ -30,6 +32,11 @@ export const grokImagine: ModelConfig = {
 			type: 'select',
 			options: GROK_IMAGE_RATIOS,
 			default: '1:1',
+			cloudOptions: [
+				{ label: '1:1', value: '1:1' },
+				{ label: '16:9', value: '16:9' },
+				{ label: '9:16', value: '9:16' },
+			],
 		},
 		{
 			id: 'quality',

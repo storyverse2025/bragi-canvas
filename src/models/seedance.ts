@@ -34,6 +34,12 @@ export const seedance2: ModelConfig = {
 				{ label: '15s', value: '15' },
 			],
 			default: '5',
+			// Router seedance duration enum locks ['-1', '5', '10']
+			cloudOptions: [
+				{ label: 'Auto', value: '-1' },
+				{ label: '5s', value: '5' },
+				{ label: '10s', value: '10' },
+			],
 		},
 		{
 			id: 'ratio',
@@ -47,6 +53,12 @@ export const seedance2: ModelConfig = {
 				{ label: '3:4', value: '3:4' },
 			],
 			default: '16:9',
+			// Router seedance ratio enum is ['9:16','16:9','1:1']
+			cloudOptions: [
+				{ label: '16:9', value: '16:9' },
+				{ label: '9:16', value: '9:16' },
+				{ label: '1:1', value: '1:1' },
+			],
 		},
 		{
 			id: 'resolution',
@@ -106,6 +118,12 @@ export const seedance2Fast: ModelConfig = {
 				{ label: '15s', value: '15' },
 			],
 			default: '5',
+			// Router seedance duration enum locks ['-1', '5', '10']
+			cloudOptions: [
+				{ label: 'Auto', value: '-1' },
+				{ label: '5s', value: '5' },
+				{ label: '10s', value: '10' },
+			],
 		},
 		{
 			id: 'ratio',
