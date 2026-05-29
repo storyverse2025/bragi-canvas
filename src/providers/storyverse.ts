@@ -369,6 +369,13 @@ export class StoryverseVideoProvider extends StoryverseClient implements VideoPr
 			case 'seedance-2.0-fast':
 				return { model, prompt, duration: str(p.duration, '-1'), ratio: str(p.ratio, '16:9'), generate_audio: bool(p.generate_audio, true), ...assets }
 			case 'grok-video':
+				// Router schema requires `input_assets.min(1)`; text-to-video and video-extend
+				// modes (no image ref) would 400. The panel hides those modes in Cloud Mode
+				// (unsupportedCloudModes on grok-video); throw here too so non-panel callers
+				// (MCP, scripted) get a clear error instead of a router 400.
+				if (inputAssets.length === 0) {
+					throw new Error('Storyverse: grok-video via Cloud Mode requires a reference image (text-to-video / video-extend modes are not supported by the V1 router schema). Attach an image upstream or use Local Mode.')
+				}
 				return { model, prompt, duration: '6', input_assets: inputAssets }
 			case 'veo-3.1':
 			case 'veo-3.1-lite': {

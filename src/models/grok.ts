@@ -54,6 +54,7 @@ export const grokVideo: ModelConfig = {
 		fal: { apiModelId: 'xai/grok-imagine-video' },
 	},
 	modes: ['text-to-video', 'first-frame', 'image-ref', 'video-extend'],
+	unsupportedCloudModes: ['text-to-video', 'video-extend'],
 	params: [
 		{
 			id: 'duration',

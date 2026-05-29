@@ -593,7 +593,7 @@ export class BragiSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Bragi token')
-			.setDesc('Your svsk- access token.')
+			.setDesc('Your svsk- access token. Stored unencrypted in the vault data file — treat as a secret.')
 			.addText(text => {
 				text.inputEl.type = 'password'
 				text.setPlaceholder('Your svsk- token')

@@ -12,6 +12,7 @@ export const seedance2: ModelConfig = {
 		tokenrouter: { apiModelId: 'dreamina-seedance-2-0-260128' },
 	},
 	modes: ['text-to-video', 'first-frame', 'image-ref', 'video-ref'],
+	unsupportedCloudModes: ['video-ref'],
 	params: [
 		{
 			id: 'duration',
@@ -83,6 +84,7 @@ export const seedance2Fast: ModelConfig = {
 		tokenrouter: { apiModelId: 'dreamina-seedance-2-0-fast-260128' },
 	},
 	modes: ['text-to-video', 'first-frame', 'image-ref', 'video-ref'],
+	unsupportedCloudModes: ['video-ref'],
 	params: [
 		{
 			id: 'duration',

@@ -54,6 +54,14 @@ export interface ModelConfig {
 	type: GenerationType
 	supportedProviders: Record<string, ProviderConfig>  // provider name → config
 	modes: Mode[]
+	/**
+	 * Modes that the V1 router schema can't serve for this model. The panel hides
+	 * them from the mode selector in Cloud Mode (Local Mode is unaffected), so the
+	 * user can't pick a mode that's destined to fail. The storyverse provider also
+	 * throws defensively where the gap would otherwise produce a 4xx round-trip
+	 * (e.g. grok-video text-to-video → router requires `input_assets.min(1)`).
+	 */
+	unsupportedCloudModes?: Mode[]
 	params: ModelParam[]
 	voiceConfig?: {
 		builtin: boolean

@@ -144,11 +144,15 @@ function catalogProviderFor(_model: ModelConfig, activeProvider: string): string
 	return activeProvider
 }
 
-function voiceConfigFor(model: ModelConfig | null): { builtin: boolean; clone: boolean; design: boolean } {
+function voiceConfigFor(model: ModelConfig | null, settings: BragiSettings): { builtin: boolean; clone: boolean; design: boolean } {
+	// Cloud Mode: storyverse provider has no cloneVoice/designVoice implementation
+	// (router has no voice-clone/design endpoints in V1). Force-disable both so the
+	// panel doesn't expose source options that would runtime-throw on submit.
+	const cloudMode = settings.generationMode === 'cloud'
 	return {
 		builtin: model?.voiceConfig?.builtin ?? true,
-		clone: model?.voiceConfig?.clone ?? false,
-		design: model?.voiceConfig?.design ?? false,
+		clone: !cloudMode && (model?.voiceConfig?.clone ?? false),
+		design: !cloudMode && (model?.voiceConfig?.design ?? false),
 	}
 }
 
@@ -176,8 +180,8 @@ function supportsAudioIntent(model: ModelConfig, intent: AudioIntent): boolean {
 	return model.modes.includes('music') || model.modes.includes('sound-effect')
 }
 
-function supportsVoiceSource(model: ModelConfig, source: VoiceMode): boolean {
-	const config = voiceConfigFor(model)
+function supportsVoiceSource(model: ModelConfig, source: VoiceMode, settings: BragiSettings): boolean {
+	const config = voiceConfigFor(model, settings)
 	if (!model.modes.includes('tts')) return false
 	if (source === 'reference') return config.clone
 	if (source === 'design') return config.design
@@ -376,7 +380,7 @@ export function showGenerateBar(
 	function audioModelsFor(intent: AudioIntent, source: VoiceMode): ModelConfig[] {
 		const audioModels = getModelsForType('audio')
 		if (intent === 'music') return audioModels.filter(model => supportsAudioIntent(model, 'music'))
-		return audioModels.filter(model => supportsAudioIntent(model, 'speech') && supportsVoiceSource(model, source))
+		return audioModels.filter(model => supportsAudioIntent(model, 'speech') && supportsVoiceSource(model, source, settings))
 	}
 
 	function filteredModelsForCurrentSelection(): ModelConfig[] {
@@ -485,16 +489,23 @@ export function showGenerateBar(
 
 	function rebuildModeList() {
 		modeSelect.innerHTML = ''
-		if (!selectedModel || selectedModel.modes.length <= 1) {
+		if (!selectedModel) { modeSelect.classList.add('bragi-hidden'); selectedMode = null; return }
+
+		// Cloud Mode: hide modes the V1 router can't serve for this model — otherwise
+		// the user picks e.g. Veo first-frame and gets a runtime "refs not supported" throw.
+		const unsupported = (settings.generationMode === 'cloud' && selectedModel.unsupportedCloudModes) || []
+		const visibleModes = selectedModel.modes.filter(m => !unsupported.includes(m))
+
+		if (visibleModes.length <= 1) {
 			modeSelect.classList.add('bragi-hidden')
-			selectedMode = selectedModel?.modes[0] || null
+			selectedMode = visibleModes[0] || null
 			return
 		}
 
 		modeSelect.classList.remove('bragi-hidden')
-		const inferred = inferMode(selectedModel.modes, upstreamImageCount, upstreamVideoCount)
+		const inferred = inferMode(visibleModes, upstreamImageCount, upstreamVideoCount)
 
-		for (const mode of selectedModel.modes) {
+		for (const mode of visibleModes) {
 			const opt = createEl('option')
 			opt.value = mode
 			opt.textContent = MODE_LABELS[mode] || mode
@@ -528,7 +539,7 @@ export function showGenerateBar(
 	}
 
 	function applyInitialVoiceModeDefaults() {
-		const config = voiceConfigFor(selectedModel)
+		const config = voiceConfigFor(selectedModel, settings)
 		if (!selectedModel || selectedModel.type !== 'audio' || (!config.clone && !config.design)) {
 			delete paramValues.voiceMode
 			delete paramValues.voiceRefAudioIndex
@@ -666,7 +677,7 @@ export function showGenerateBar(
 				if (!valid && param.id !== 'voice') paramValues[param.id] = param.default
 
 				if (param.id === 'voice') {
-					const config = voiceConfigFor(selectedModel)
+					const config = voiceConfigFor(selectedModel, settings)
 					if (config.clone || config.design) {
 						applyInitialVoiceModeDefaults()
 						if (currentType === 'audio' && audioIntent === 'speech') {
@@ -911,7 +922,7 @@ export function showGenerateBar(
 			}
 		}
 
-		const voiceConfig = voiceConfigFor(selectedModel)
+		const voiceConfig = voiceConfigFor(selectedModel, settings)
 		if (selectedModel?.type === 'audio' && selectedMode === 'tts' && (voiceConfig.clone || voiceConfig.design)) {
 			if (selectedVoiceMode(paramValues) === 'reference') {
 				if (orderedAudios.length === 0) {
@@ -1234,7 +1245,7 @@ export function showBatchGenerateBar(
 				if (!effectiveOptions.some(o => o.value === currentValue) && param.id !== 'voice') paramValues[param.id] = param.default
 
 				if (param.id === 'voice') {
-						const config = voiceConfigFor(selectedModel)
+						const config = voiceConfigFor(selectedModel, settings)
 						const button = createEl('button')
 						button.className = 'bragi-bar-voice-btn'
 						button.title = param.label
@@ -1334,7 +1345,7 @@ export function showBatchGenerateBar(
 	}
 
 	function updateRunState() {
-		const config = voiceConfigFor(selectedModel)
+		const config = voiceConfigFor(selectedModel, settings)
 		const disabled = !!(selectedModel?.type === 'audio' && selectedMode === 'tts' && (config.clone || config.design) && !config.builtin)
 		runBtn.disabled = disabled
 		runBtn.title = disabled ? 'This model requires a single-node voice source.' : ''
