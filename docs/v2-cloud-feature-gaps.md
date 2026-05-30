@@ -11,9 +11,10 @@
 > drift is server-side only.
 >
 > The follow-ups below are still valid as a server-side roadmap (which router
-> schemas to extend), but the **plugin-side work** for each item simplifies:
-> just extend `buildBody` in `src/providers/storyverse.ts` to forward the new
-> field, no plugin model flag to remove.
+> schemas to extend). Until V3 makes the router manifest the catalog source of
+> truth, the plugin hides Storyverse-only no-op params/modes listed in
+> `src/providers/storyverse.ts` and `src/providers/storyverse.ts` forwards only
+> fields implemented by the router.
 
 V1 Storyverse (PR #3) prioritized "main generation path works end-to-end" over
 "every UI control transparently flows through the router." A number of UI
@@ -26,25 +27,24 @@ This file is the canonical V2 todo. When opening a follow-up PR, link it here.
 
 ## How V1 currently handles the gap
 
-After the refactor: the plugin sends whatever the panel collected; the router
-either accepts it or returns 400; the user sees the router's error. There is no
-plugin-side "is this param allowed" gating. The only client-side throws left
-are the few cases where letting the request reach the router would 400 with a
-worse error (Veo `refImages` with no input_assets schema; grok-video text-to-
-video with no input_assets; ref-count overflow per model).
+After the R9/R10 cleanup: Storyverse-only no-op params and unsupported modes
+are hidden in the panel and omitted from MCP `list_models`; MCP `generate`
+rejects caller-supplied off-surface params/modes. The remaining client-side
+throws are the few cases where letting the request reach the router would 400
+with a worse error (Veo `refImages` with no input_assets schema; grok-video
+text-to-video with no input_assets; ref-count overflow per model).
 
 V2 PRs should:
 1. Implement the field in `server/src/schemas/*.ts` (and the adapter).
 2. Wire `src/providers/storyverse.ts` `buildBody` to forward the value.
-3. (No plugin model file changes needed — model defs are provider-agnostic.)
+3. Remove the field/mode from `STORYVERSE_NOOP_PARAMS` or `STORYVERSE_UNSUPPORTED_MODES`.
 
 ## Per-model parameters that are no-op via Storyverse today
 
-When the panel routes through Storyverse, these UI controls are visible (because
-the model file declares them for the model's other providers) but get dropped
-in `storyverse.ts buildBody`. The user picks a value, the request goes to the
-router, the router never sees the field. V2 closes each by extending the
-server schema + adapter and updating `buildBody` to forward the value.
+When the panel routes through Storyverse, these UI controls are hidden because
+the model file declares them for other providers but Storyverse V1 does not
+forward them. V2 closes each by extending the server schema + adapter, updating
+`buildBody` to forward the value, and removing the corresponding hide rule.
 
 | Model | No-op params via Storyverse | V2 server work |
 |---|---|---|
@@ -59,10 +59,6 @@ server schema + adapter and updating `buildBody` to forward the value.
 | `elevenlabs-tts-v3` | `stability`, `similarity_boost`, `style`, `speed` | Add to `/v1/audio/speech` schema |
 | `grok-tts` | `language` (xAI auto-detection control) | Add to schema |
 | `elevenlabs-music`, `elevenlabs-sfx` | duration controls past current `duration_ms` floor/ceiling | Extend per-model min/max in schema |
-
-This list intentionally does **not** trigger client-side throws — Simon's gateway
-direction is "user picks, router 400s if invalid, user sees router's error." The
-list is here for V2 PR scoping, not as plugin-side issues to fix.
 
 A few **defensive throws** remain in `storyverse.ts` for cases where the silent
 drop is genuinely user-hostile (router would either 400 with a worse error, or
@@ -195,7 +191,7 @@ obvious wire-level gaps.
 | `BUILTIN_BRAGI_RELAY.token` hardcoded in client | `src/providers/bragi-relay.ts` (predates Cloud Mode) | Move all ref uploads to router's `/v1/uploads` (already used by Cloud Mode) and retire the temp.bragi.now public-anonymous worker; or issue per-request short-lived tokens server-side |
 | `bragiToken` + provider API keys stored plaintext in `data.json` | Obsidian plugin storage convention | Encrypt at rest (OS keychain or libsodium with vault-bound key); document in plugin settings |
 | `console.error(prefix, err)` in `main.ts` logs raw Error objects to DevTools console | 9 sites in `main.ts` | Wrap Notice + console.error in a `safeReport(err)` helper that runs `sanitizeRouterMessage` on the message. Router-origin errors are already sanitized at throw time, but non-router errors (network, plugin's own preconditions) can carry URLs/paths. Devtools-opened users only; no tokens (those live in headers, not Error.message) |
-| `/v1/auth/check` echoes the svsk- token in its response body as `label` | `server/src/routes/auth.ts:24` (`return c.json({ ok: true, label: token })`) | Plugin already drops `label` from the user-facing Notice (R3 — `testStoryverseAuth` returns generic "Token OK"), so the user doesn't see it. But the token still appears on the wire / in reverse-proxy logs / DevTools Network panel. Server-side fix: return `{ ok: true }` or `{ ok: true, label: hashPrefix(token, 8) }` (short non-reversible identifier for support-channel matching). Small standalone server PR — same shape as PR #2's rename |
+| `/v1/auth/check` echoed the svsk- token in its response body as `label` | Fixed in PR #3 R10: `server/src/routes/auth.ts` returns `{ ok: true }` only | Keep regression test coverage in `server/test/routes/auth.test.ts`; do not reintroduce token-derived labels unless they are non-reversible |
 
 ## Observability follow-ups
 

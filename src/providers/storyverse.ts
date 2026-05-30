@@ -73,7 +73,7 @@ export const STORYVERSE_NOOP_PARAMS: Readonly<Record<string, readonly string[]>>
 	'grok-imagine': ['quality'],
 	'veo-3.1': ['durationSeconds', 'resolution'],
 	'veo-3.1-lite': ['durationSeconds', 'resolution'],
-	'grok-video': ['aspect_ratio', 'resolution'],   // duration is hard-locked to '6' in buildBody
+	'grok-video': ['duration', 'aspect_ratio', 'resolution'],   // duration is hard-locked to '6' in buildBody
 	'seedance-2.0': ['resolution'],
 	'seedance-2.0-fast': ['resolution'],
 	'kling-2.6': ['mode'],
@@ -378,8 +378,7 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 		switch (model) {
 			case 'gpt-image-2':
 				// Router gpt-image-2 schema accepts size ∈ {1024x1024, 1792x1024, 1024x1792} (no imageSize/quality
-				// fields). Plugin params imageSize / quality are passed through — the upstream provider's API
-				// either accepts them or doesn't. aspectToSize throws on ratios outside the supported three.
+				// fields). aspectToSize throws on ratios outside the supported three.
 				return { model, prompt, n: 1, size: aspectToSize(p.aspectRatio), ...assets }
 			case 'nano-banana-pro':
 			case 'nano-banana-2':

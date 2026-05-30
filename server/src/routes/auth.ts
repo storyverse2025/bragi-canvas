@@ -21,8 +21,4 @@ const authCheckRoute = createRoute({
   },
 })
 
-authRoute.openapi(authCheckRoute, c => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const token = (c as any).get('bragiToken') as string
-  return c.json({ ok: true, label: token })
-})
+authRoute.openapi(authCheckRoute, c => c.json({ ok: true }))

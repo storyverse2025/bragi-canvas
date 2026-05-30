@@ -44,6 +44,8 @@ const mcp         = readFileSync('src/mcp-tool-registry.ts', 'utf8')
 const settings    = readFileSync('src/settings.ts', 'utf8')
 const main        = readFileSync('src/main.ts', 'utf8')
 const addProvider = readFileSync('src/ui/add-provider-modal.ts', 'utf8')
+const serverAuth  = readFileSync('server/src/routes/auth.ts', 'utf8')
+const serverAuthTest = readFileSync('server/test/routes/auth.test.ts', 'utf8')
 
 // ── R8 architectural invariants ─────────────────────────────────────────────────
 
@@ -81,11 +83,40 @@ assert.match(
 function assertStoryverseLast(source, label) {
 	// Find every `supportedProviders: { ... }` block in `source` and inside each, if a
 	// storyverse entry exists, it must be the last key.
-	const re = /supportedProviders:\s*\{([\s\S]*?)\}/g
-	let m
-	while ((m = re.exec(source)) !== null) {
-		const body = m[1]
-		const keyOrder = [...body.matchAll(/^\s*(?:\/\/.*\n\s*)*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/gm)].map(x => x[1])
+	let cursor = 0
+	while (cursor < source.length) {
+		const marker = source.indexOf('supportedProviders:', cursor)
+		if (marker === -1) break
+		const open = source.indexOf('{', marker)
+		assert.notStrictEqual(open, -1, `${label}: supportedProviders has an opening brace`)
+		let depth = 0
+		let close = -1
+		for (let i = open; i < source.length; i++) {
+			const ch = source[i]
+			if (ch === '{') depth++
+			if (ch === '}') {
+				depth--
+				if (depth === 0) {
+					close = i
+					break
+				}
+			}
+		}
+		assert.notStrictEqual(close, -1, `${label}: supportedProviders has a closing brace`)
+		const body = source.slice(open + 1, close)
+		const keyOrder = []
+		depth = 0
+		for (const line of body.split('\n')) {
+			if (depth === 0) {
+				const key = line.match(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/)?.[1]
+				if (key) keyOrder.push(key)
+			}
+			for (const ch of line) {
+				if (ch === '{') depth++
+				if (ch === '}') depth--
+			}
+		}
+		cursor = close + 1
 		if (!keyOrder.includes('storyverse')) continue
 		assert.strictEqual(
 			keyOrder[keyOrder.length - 1],
@@ -140,6 +171,8 @@ assert.match(sv, /['"]grok-imagine['"]:\s*\[[^\]]*['"]image-ref-to-image['"]/s,
 	'STORYVERSE_UNSUPPORTED_MODES["grok-imagine"] must block image-ref-to-image')
 assert.match(sv, /['"]grok-video['"]:\s*\[[^\]]*['"]text-to-video['"][^\]]*['"]video-extend['"]/s,
 	'STORYVERSE_UNSUPPORTED_MODES["grok-video"] must block text-to-video + video-extend (router requires input_assets.min(1))')
+assert.match(sv, /['"]grok-video['"]:\s*\[[^\]]*['"]duration['"][^\]]*['"]aspect_ratio['"][^\]]*['"]resolution['"]/s,
+	'STORYVERSE_NOOP_PARAMS["grok-video"] must list duration + aspect_ratio + resolution (router hard-locks duration and ignores ratio/resolution)')
 
 // ── Panel mirrors the storyverse-specific carve-outs ──
 
@@ -174,6 +207,36 @@ assert.match(
 	panel,
 	/function modelSupportsInputs[\s\S]*?const modes = visibleModesFor\(m, providerFor\(m\)\)/,
 	'modelSupportsInputs uses visibleModesFor so it does not advertise modes the storyverse provider would runtime-throw on',
+)
+assert.match(
+	panel,
+	/function modelSupportsInputs[\s\S]*?m\.type === 'image'[\s\S]*?STORYVERSE_UNSUPPORTED_MODES\[m\.id\]\?\.includes\('image-ref-to-image'\)/,
+	'modelSupportsInputs handles storyverse image-model unsupported ref modes (grok-imagine + upstream image must not be selectable)',
+)
+assert.match(
+	panel,
+	/function stripHiddenParamValues[\s\S]*?STORYVERSE_NOOP_PARAMS\[model\.id\]/,
+	'panel.ts has a helper that strips hidden storyverse no-op params from restored/submitted param values',
+)
+assert.match(
+	panel,
+	/paramValues = stripHiddenParamValues\(selectedModel,\s*providerFor\(selectedModel\),\s*\{ \.\.\.paramValues,\s*\.\.\.savedParams \}\)/,
+	'panel.ts strips storyverse no-op params when restoring old lastSelection params',
+)
+assert.match(
+	panel,
+	/const submitParams = stripHiddenParamValues\(selectedModel,\s*providerFor\(selectedModel\),\s*paramValues\)[\s\S]*params:\s*\{ \.\.\.submitParams \}/,
+	'panel.ts stores stripped params in lastSelection/node metadata before single-submit',
+)
+assert.match(
+	panel,
+	/onSubmit\(\{ prompt, model: selectedModel,[\s\S]*params:\s*submitParams/,
+	'panel.ts submits stripped params from the single-node panel',
+)
+assert.match(
+	panel,
+	/onSubmit\(nodes,\s*\{[\s\S]*params:\s*submitParams/,
+	'panel.ts submits stripped params from the batch panel',
 )
 
 // voiceConfigFor must take activeProvider + force clone/design off under storyverse
@@ -216,6 +279,24 @@ assert.match(
 	mcp,
 	/Parameter "\$\{k\}" is not supported for \$\{model\.id\} via storyverse/,
 	'mcp generate refuses no-op storyverse params explicitly (no silent strip)',
+)
+
+// ── Server auth check must not echo svsk tokens ─────────────────────────────────
+
+assert.match(
+	serverAuth,
+	/c\.json\(\{\s*ok:\s*true\s*\}\)/,
+	'server /v1/auth/check returns only { ok: true }',
+)
+assert.doesNotMatch(
+	serverAuth,
+	/label:\s*token|get\(['"]bragiToken['"]\)/,
+	'server /v1/auth/check must not echo or read the raw token into the response body',
+)
+assert.match(
+	serverAuthTest,
+	/not\.toHaveProperty\(['"]label['"]\)[\s\S]*not\.toContain\(['"]svsk-test-1['"]\)/,
+	'server auth test asserts the response does not contain the raw token',
 )
 
 // ── storyverse.ts defensive throws (last line of defense for non-panel callers) ──
@@ -264,5 +345,5 @@ console.log('✓ verify-storyverse: all', countAssertions(), 'invariants pass')
 function countAssertions() {
 	// Sloppy but enough for the success line; counts assert.* calls in this file at runtime.
 	const self = readFileSync('scripts/verify-storyverse.mjs', 'utf8')
-	return (self.match(/assert\.(match|ok|strictEqual|doesNotMatch)/g) || []).length
+	return (self.match(/assert\.(match|ok|strictEqual|notStrictEqual|doesNotMatch)/g) || []).length
 }

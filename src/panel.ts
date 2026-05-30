@@ -209,6 +209,20 @@ function visibleParamsFor(model: ModelConfig | null, activeProvider: string | nu
 	return model.params.filter(p => !noOps.includes(p.id))
 }
 
+function stripHiddenParamValues(
+	model: ModelConfig | null,
+	activeProvider: string | null,
+	values: Record<string, unknown>,
+): Record<string, string | number> {
+	const hidden = new Set(model ? (STORYVERSE_NOOP_PARAMS[model.id] || []) : [])
+	const filtered: Record<string, string | number> = {}
+	for (const [key, value] of Object.entries(values)) {
+		if (model && activeProvider === 'storyverse' && hidden.has(key)) continue
+		if (typeof value === 'string' || typeof value === 'number') filtered[key] = value
+	}
+	return filtered
+}
+
 function inferMode(modes: Mode[], imageCount: number, videoCount: number): Mode {
 	// Video upstream → reference or extend
 	if (videoCount > 0 && modes.includes('video-ref')) return 'video-ref'
@@ -813,12 +827,20 @@ export function showGenerateBar(
 
 	function modelSupportsInputs(m: ModelConfig): boolean {
 		if (m.type === 'text') return textUpstreamIssue(m) === null
-		// Image models — always compatible for now
-		if (m.type !== 'video') return true
 		// Visible modes account for the storyverse-specific carve-outs (e.g. Veo first-frame is
 		// unreachable via storyverse in V1). Without this, the model picker marks a model as
 		// "compatible with upstream X" when the only matching mode would runtime-throw at submit.
 		const modes = visibleModesFor(m, providerFor(m))
+		if (m.type === 'image') {
+			if (upstreamVideoCount > 0) return false
+			if (upstreamImageCount > 0) {
+				return !(providerFor(m) === 'storyverse'
+					&& STORYVERSE_UNSUPPORTED_MODES[m.id]?.includes('image-ref-to-image')
+					&& !modes.includes('image-ref-to-image'))
+			}
+			return modes.includes('text-to-image')
+		}
+		if (m.type !== 'video') return true
 		// No special inputs — only text-to-video models can run without refs.
 		if (upstreamImageCount === 0 && upstreamVideoCount === 0) return modes.includes('text-to-video')
 		// Has video input — needs a video-input mode
@@ -878,7 +900,7 @@ export function showGenerateBar(
 
 		// Restore saved params AFTER initDefaults (which resets to defaults).
 		if (savedParams) {
-			paramValues = { ...paramValues, ...savedParams }
+			paramValues = stripHiddenParamValues(selectedModel, providerFor(selectedModel), { ...paramValues, ...savedParams })
 			applyInitialVoiceModeDefaults()
 		}
 
@@ -1045,11 +1067,13 @@ export function showGenerateBar(
 			hideGenerateBar()
 			const batchCount = parseInt(batchSelect.value) || 1
 
+			const submitParams = stripHiddenParamValues(selectedModel, providerFor(selectedModel), paramValues)
+
 			// Save to global memory
 			const lastKey = lastSelectionKey(currentType)
 			;(settings as unknown)[lastKey] = {
 				modelId: selectedModel.id,
-				params: { ...paramValues },
+				params: { ...submitParams },
 				batchCount,
 			}
 			onSaveSettings?.()
@@ -1059,7 +1083,7 @@ export function showGenerateBar(
 			const bragiLastGen = currentNodeData.bragiLastGen || currentNodeData.ovidLastGen || {}
 			bragiLastGen[currentType] = {
 				modelId: selectedModel.id,
-				params: { ...paramValues },
+				params: { ...submitParams },
 				batchCount,
 			}
 			// Write new key, drop the legacy one so it doesn't silently drift
@@ -1070,7 +1094,7 @@ export function showGenerateBar(
 			// Resolve active provider and API model ID
 			const { provider, apiModelId } = resolveProvider(selectedModel, settings, configuredProviders)
 
-			onSubmit({ prompt, model: selectedModel, activeProvider: provider, apiModelId, mode: selectedMode, params: paramValues, batchCount })
+			onSubmit({ prompt, model: selectedModel, activeProvider: provider, apiModelId, mode: selectedMode, params: submitParams, batchCount })
 		})()
 	})
 
@@ -1402,10 +1426,11 @@ export function showBatchGenerateBar(
 		hideGenerateBar()
 
 		const batchCount = parseInt(batchSelect.value) || 1
+		const submitParams = stripHiddenParamValues(selectedModel, providerFor(selectedModel), paramValues)
 		const lastKey = lastSelectionKey(currentType)
 		;(settings as unknown)[lastKey] = {
 			modelId: selectedModel.id,
-			params: { ...paramValues },
+			params: { ...submitParams },
 			batchCount,
 		}
 		onSaveSettings?.()
@@ -1418,7 +1443,7 @@ export function showBatchGenerateBar(
 			activeProvider: provider,
 			apiModelId,
 			mode: selectedMode,
-			params: paramValues,
+			params: submitParams,
 			batchCount,
 		})
 	})
