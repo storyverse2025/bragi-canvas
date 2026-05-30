@@ -38,6 +38,44 @@ V2 PRs should:
 2. Wire `src/providers/storyverse.ts` `buildBody` to forward the value.
 3. (No plugin model file changes needed — model defs are provider-agnostic.)
 
+## Per-model parameters that are no-op via Storyverse today
+
+When the panel routes through Storyverse, these UI controls are visible (because
+the model file declares them for the model's other providers) but get dropped
+in `storyverse.ts buildBody`. The user picks a value, the request goes to the
+router, the router never sees the field. V2 closes each by extending the
+server schema + adapter and updating `buildBody` to forward the value.
+
+| Model | No-op params via Storyverse | V2 server work |
+|---|---|---|
+| `nano-banana-pro`, `nano-banana-2` | `imageSize` | Add to `images-generations` schema + apimart adapter |
+| `seedream-4.5`, `seedream-5.0` | `resolution` | Add to schema + byteplus adapter |
+| `gpt-image-2` | `imageSize`, `quality` | Mixed — OpenAI direct only takes `size`; quality came from fal. Cloud V2 could plumb via fal fallback |
+| `grok-imagine` | `quality` (Normal vs Quality tier) | xAI adapter must accept the quality flag |
+| `veo-3.1`, `veo-3.1-lite` | `durationSeconds`, `resolution` | Add to Veo schema + adapter |
+| `grok-video` | `duration`, `aspect_ratio`, `resolution` | Drop hardcoded `duration: '6'`; open enums |
+| `seedance-2.0`, `seedance-2.0-fast` | `resolution` | Add to schema + byteplus adapter |
+| `kling-2.6`, `kling-3.0` | `mode` (Standard vs Pro) | Add to schema; fal adapter routes pro/std |
+| `elevenlabs-tts-v3` | `stability`, `similarity_boost`, `style`, `speed` | Add to `/v1/audio/speech` schema |
+| `grok-tts` | `language` (xAI auto-detection control) | Add to schema |
+| `elevenlabs-music`, `elevenlabs-sfx` | duration controls past current `duration_ms` floor/ceiling | Extend per-model min/max in schema |
+
+This list intentionally does **not** trigger client-side throws — Simon's gateway
+direction is "user picks, router 400s if invalid, user sees router's error." The
+list is here for V2 PR scoping, not as plugin-side issues to fix.
+
+A few **defensive throws** remain in `storyverse.ts` for cases where the silent
+drop is genuinely user-hostile (router would either 400 with a worse error, or
+return a result wildly unrelated to what the user asked for):
+- `gpt-image-2`: aspect ratios outside `{1:1, 16:9, 9:16}` throw (otherwise silently mapped to 1024×1024 square).
+- `grok-imagine`: any `refImages` throws (V1 router schema is text-to-image only; silent drop would render unrelated content).
+- `grok-video`: missing `refImages` throws (V1 router schema requires `input_assets.min(1)`).
+- `veo-3.1` / `veo-3.1-lite`: any `refImages` throws (V1 router Veo schema has no `input_assets`).
+- Per-model ref-count overflow: `refuseTooManyRefs` enforces the router's `input_assets.max(N)` per model.
+
+These are the only intentional client-side gates. Everything else lets the
+router speak for itself.
+
 ## V3 — dynamic model manifest (full "AI Gateway" direction)
 
 V1 + V2 keep the plugin's static model registry (`src/models/*.ts`) as the

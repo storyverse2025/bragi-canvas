@@ -39,10 +39,10 @@ export const kling3: ModelConfig = {
 	name: 'Kling 3.0',
 	type: 'video',
 	supportedProviders: {
-		storyverse: { apiModelId: 'kling-3.0' },
 		kling: { apiModelId: 'kling-v3' },
 		fal: { apiModelId: 'fal-ai/kling-video/v3/pro' },
 		tokenrouter: { apiModelId: 'kling-v3' },
+		storyverse: { apiModelId: 'kling-3.0' },
 	},
 	// T2V + first-frame (image→video) + first-last-frame (start+end keyframe)
 	modes: ['text-to-video', 'first-frame', 'first-last-frame'],
@@ -54,9 +54,9 @@ export const kling26: ModelConfig = {
 	name: 'Kling 2.6',
 	type: 'video',
 	supportedProviders: {
-		storyverse: { apiModelId: 'kling-2.6' },
 		kling: { apiModelId: 'kling-v2-6' },
 		tokenrouter: { apiModelId: 'kling-v2-6' },
+		storyverse: { apiModelId: 'kling-2.6' },
 	},
 	modes: ['text-to-video', 'first-frame', 'first-last-frame'],
 	params: KLING_PARAMS,

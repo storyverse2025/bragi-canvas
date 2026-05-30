@@ -338,8 +338,17 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 			case 'seedream-4.5':
 			case 'seedream-5.0':
 				return { model, prompt, aspectRatio: str(p.aspectRatio, '1:1'), n: 1, ...assets }
-			case 'grok-imagine':
+			case 'grok-imagine': {
+				// Plugin model declares image-ref-to-image mode (XAI direct supports it via
+				// quality-priority swap), but the V1 router schema for grok-imagine accepts only
+				// { prompt, aspectRatio } — no input_assets. Refuse explicitly rather than
+				// silently dropping the user's ref image, which would render unrelated content.
+				const userRefs = (p.refImages as string[] | undefined) || []
+				if (userRefs.length > 0) {
+					throw new Error('Storyverse: grok-imagine does not support reference images in the V1 router schema (text-to-image only). Pick a different provider for this model or use text-to-image mode.')
+				}
 				return { model, prompt, aspectRatio: str(p.aspectRatio, '1:1') }
+			}
 			case 'midjourney-v8':
 			case 'midjourney-niji-7':
 				// Plugin quality is '1'/'4' (cost tier); router enum is low/medium/high. Map at the boundary.

@@ -5,11 +5,11 @@ export const seedance2: ModelConfig = {
 	name: 'Seedance 2.0',
 	type: 'video',
 	supportedProviders: {
-		storyverse: { apiModelId: 'seedance-2.0' },
 		bytedance: { apiModelId: 'doubao-seedance-2-0-260128' },
 		byteplus: { apiModelId: 'ep-20260423151427-fj6dh' },
 		fal: { apiModelId: 'bytedance/seedance-2.0' },
 		tokenrouter: { apiModelId: 'dreamina-seedance-2-0-260128' },
+		storyverse: { apiModelId: 'seedance-2.0' },
 	},
 	modes: ['text-to-video', 'first-frame', 'image-ref', 'video-ref'],
 	params: [
@@ -76,10 +76,10 @@ export const seedance2Fast: ModelConfig = {
 	name: 'Seedance 2.0 Fast',
 	type: 'video',
 	supportedProviders: {
-		storyverse: { apiModelId: 'seedance-2.0-fast' },
 		bytedance: { apiModelId: 'doubao-seedance-2-0-fast-260128' },
 		byteplus: { apiModelId: 'ep-20260423151341-p2zm9' },
 		tokenrouter: { apiModelId: 'dreamina-seedance-2-0-fast-260128' },
+		storyverse: { apiModelId: 'seedance-2.0-fast' },
 	},
 	modes: ['text-to-video', 'first-frame', 'image-ref', 'video-ref'],
 	params: [

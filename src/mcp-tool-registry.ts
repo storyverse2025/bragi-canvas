@@ -527,6 +527,14 @@ export function createMcpToolRegistry(ctx: McpToolContext): McpToolDef[] {
 				}
 				if (!prompt) throw new Error('Node contains no prompt text')
 
+				// Explicit mode → must be one this model supports. list_models advertises the modes
+				// array, so accepting an off-list mode would silently violate that contract and let
+				// the caller pick a path the provider can't serve.
+				if (mode && !model.modes.includes(mode as Mode)) {
+					throw new Error(
+						`Mode "${mode}" is not supported for ${model.id}. Available: ${model.modes.join(', ') || '(none)'}`,
+					)
+				}
 				const selectedMode = (mode as Mode) || model.modes[0] || null
 
 				// Fill defaults for any params the caller didn't pass; pass-through caller values as-is.
