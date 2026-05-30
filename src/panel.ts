@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- Obsidian Canvas internals and provider payloads are runtime-shaped data that this plugin narrows at use sites. */
 import { Notice, App } from 'obsidian'
 import type { ModelConfig, GenerationType, Mode, ModelParam, VoiceSourceMode } from './models/types'
-import { cloudEffectiveModes, cloudEffectiveOptions, cloudEffectiveMax, cloudEffectiveDefault, normalizeCloudParamValue } from './models/cloud-overrides'
 import { getEnabledModels, getActiveProvider } from './models/index'
 import { getTextInputCapability, textInputKindSupported } from './models/text-input-capabilities'
 import { getConfiguredProviderIds } from './providers/registry'
@@ -78,7 +77,6 @@ function renderRangeParamDropdown(
 	paramsEl: HTMLElement,
 	param: ModelParam,
 	paramValues: Record<string, string | number>,
-	settings: BragiSettings,
 ): void {
 	const details = createEl('details')
 	details.className = 'bragi-bar-range-menu'
@@ -96,9 +94,9 @@ function renderRangeParamDropdown(
 	const range = createEl('input')
 	range.type = 'range'
 	range.min = String(param.min ?? 0)
-	range.max = String(paramMax(param, settings) ?? 100)
+	range.max = String(param.max ?? 100)
 	range.step = String(param.step ?? 1)
-	range.value = String(paramValues[param.id] ?? paramDefault(param, settings))
+	range.value = String(paramValues[param.id] ?? param.default)
 	range.title = param.label
 
 	const valueLabel = createSpan()
@@ -146,48 +144,15 @@ function catalogProviderFor(_model: ModelConfig, activeProvider: string): string
 	return activeProvider
 }
 
-// Cloud-aware helpers are shared with src/mcp-tool-registry.ts via models/cloud-overrides —
-// keep the call-site names but delegate to the shared implementation so the two entry points
-// (panel UI + MCP tool) never drift.
-const paramOptions = cloudEffectiveOptions
-const paramMax = cloudEffectiveMax
-const paramDefault = cloudEffectiveDefault
-
-/**
- * Sanitize a persisted lastSelection against cloud-effective constraints before
- * merging it into paramValues. Three concerns:
- *  1. drop keys whose param is `unsupportedInCloud:true`
- *  2. drop select values that aren't in the cloud-effective options
- *     (e.g. lastImage.aspectRatio='4:3' for gpt-image-2 cloud, which accepts
- *     only 1:1/16:9/9:16 — otherwise aspectToSize silently maps to 1024x1024)
- *  3. clamp range values that exceed cloudMax
- *     (e.g. lastAudio.music_length_ms=250 → 180 so duration_ms 180000 stays
- *     under the router's cap; slider thumb also lines up with cloud cloudMax)
- *
- * Local Mode is a no-op. Non-ModelParam fields (voiceLabel, voiceMode, …) pass through.
- */
-function filterCloudUnsupportedKeys(model: ModelConfig | null, source: Record<string, unknown>, settings: BragiSettings): Record<string, unknown> {
-	if (!model || settings.generationMode !== 'cloud') return source
-	const byId = new Map(model.params.map(p => [p.id, p]))
-	const out: Record<string, unknown> = {}
-	for (const [k, v] of Object.entries(source)) {
-		const param = byId.get(k)
-		if (!param) { out[k] = v; continue }
-		const norm = normalizeCloudParamValue(param, v, settings)
-		if (norm !== undefined) out[k] = norm
-	}
-	return out
-}
-
-function voiceConfigFor(model: ModelConfig | null, settings: BragiSettings): { builtin: boolean; clone: boolean; design: boolean } {
-	// Cloud Mode: storyverse provider has no cloneVoice/designVoice implementation
-	// (router has no voice-clone/design endpoints in V1). Force-disable both so the
-	// panel doesn't expose source options that would runtime-throw on submit.
-	const cloudMode = settings.generationMode === 'cloud'
+function voiceConfigFor(model: ModelConfig | null, activeProvider: string | null): { builtin: boolean; clone: boolean; design: boolean } {
+	// Storyverse V1 router has no voice-clone / voice-design endpoint — disable both
+	// even if the model declares them, so the panel doesn't expose sources that would
+	// runtime-throw when main.ts tries to call cloneVoice/designVoice on the provider.
+	const isStoryverse = activeProvider === 'storyverse'
 	return {
 		builtin: model?.voiceConfig?.builtin ?? true,
-		clone: !cloudMode && (model?.voiceConfig?.clone ?? false),
-		design: !cloudMode && (model?.voiceConfig?.design ?? false),
+		clone: !isStoryverse && (model?.voiceConfig?.clone ?? false),
+		design: !isStoryverse && (model?.voiceConfig?.design ?? false),
 	}
 }
 
@@ -215,8 +180,8 @@ function supportsAudioIntent(model: ModelConfig, intent: AudioIntent): boolean {
 	return model.modes.includes('music') || model.modes.includes('sound-effect')
 }
 
-function supportsVoiceSource(model: ModelConfig, source: VoiceMode, settings: BragiSettings): boolean {
-	const config = voiceConfigFor(model, settings)
+function supportsVoiceSource(model: ModelConfig, source: VoiceMode, activeProvider: string | null): boolean {
+	const config = voiceConfigFor(model, activeProvider)
 	if (!model.modes.includes('tts')) return false
 	if (source === 'reference') return config.clone
 	if (source === 'design') return config.design
@@ -298,6 +263,11 @@ export function showGenerateBar(
 	function getModelsForType(t: GenerationType) {
 		const orderKey = t
 		return getEnabledModels(t, settings.modelOrder[orderKey], settings.modelPrefs, configuredProviders)
+	}
+
+	function providerFor(model: ModelConfig | null): string | null {
+		if (!model) return null
+		return resolveProvider(model, settings, configuredProviders).provider
 	}
 
 	const allEnabled = allConfiguredModels(getModelsForType)
@@ -415,7 +385,11 @@ export function showGenerateBar(
 	function audioModelsFor(intent: AudioIntent, source: VoiceMode): ModelConfig[] {
 		const audioModels = getModelsForType('audio')
 		if (intent === 'music') return audioModels.filter(model => supportsAudioIntent(model, 'music'))
-		return audioModels.filter(model => supportsAudioIntent(model, 'speech') && supportsVoiceSource(model, source, settings))
+		return audioModels.filter(model => {
+			if (!supportsAudioIntent(model, 'speech')) return false
+			const { provider } = resolveProvider(model, settings, configuredProviders)
+			return supportsVoiceSource(model, source, provider)
+		})
 	}
 
 	function filteredModelsForCurrentSelection(): ModelConfig[] {
@@ -526,21 +500,16 @@ export function showGenerateBar(
 		modeSelect.innerHTML = ''
 		if (!selectedModel) { modeSelect.classList.add('bragi-hidden'); selectedMode = null; return }
 
-		// Cloud Mode: hide modes the V1 router can't serve for this model — otherwise
-		// the user picks e.g. Veo first-frame and gets a runtime "refs not supported" throw.
-		const unsupported = (settings.generationMode === 'cloud' && selectedModel.unsupportedCloudModes) || []
-		const visibleModes = selectedModel.modes.filter(m => !unsupported.includes(m))
-
-		if (visibleModes.length <= 1) {
+		if (selectedModel.modes.length <= 1) {
 			modeSelect.classList.add('bragi-hidden')
-			selectedMode = visibleModes[0] || null
+			selectedMode = selectedModel.modes[0] || null
 			return
 		}
 
 		modeSelect.classList.remove('bragi-hidden')
-		const inferred = inferMode(visibleModes, upstreamImageCount, upstreamVideoCount)
+		const inferred = inferMode(selectedModel.modes, upstreamImageCount, upstreamVideoCount)
 
-		for (const mode of visibleModes) {
+		for (const mode of selectedModel.modes) {
 			const opt = createEl('option')
 			opt.value = mode
 			opt.textContent = MODE_LABELS[mode] || mode
@@ -557,16 +526,12 @@ export function showGenerateBar(
 		paramValues = {}
 		if (!selectedModel) return
 		for (const p of selectedModel.params) {
-			// Cloud Mode: skip params the router can't carry (the UI also hides them in
-			// rebuildParams). Not filling them into paramValues means the storyverse
-			// provider never sees those fields and we can't silently downgrade.
-			if (settings.generationMode === 'cloud' && p.unsupportedInCloud) continue
 			// Keep current value if same param exists and value is valid in new model
-			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (paramOptions(p, settings)?.length || 0) === 0
-			if (prev[p.id] !== undefined && (canKeepDynamicVoice || paramOptions(p, settings)?.some(o => o.value === String(prev[p.id])))) {
+			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (p.options?.length || 0) === 0
+			if (prev[p.id] !== undefined && (canKeepDynamicVoice || p.options?.some(o => o.value === String(prev[p.id])))) {
 				paramValues[p.id] = prev[p.id]
 			} else {
-				paramValues[p.id] = paramDefault(p, settings)
+				paramValues[p.id] = p.default
 			}
 		}
 		if (preserveDynamicVoice && typeof prev.voiceLabel === 'string') paramValues.voiceLabel = prev.voiceLabel
@@ -574,7 +539,7 @@ export function showGenerateBar(
 	}
 
 	function applyInitialVoiceModeDefaults() {
-		const config = voiceConfigFor(selectedModel, settings)
+		const config = voiceConfigFor(selectedModel, providerFor(selectedModel))
 		if (!selectedModel || selectedModel.type !== 'audio' || (!config.clone && !config.design)) {
 			delete paramValues.voiceMode
 			delete paramValues.voiceRefAudioIndex
@@ -700,19 +665,17 @@ export function showGenerateBar(
 		paramsEl.innerHTML = ''
 		if (!selectedModel) return
 		for (const param of selectedModel.params) {
-			// Hide UI controls that the V1 router schema doesn't carry. Local Mode is unaffected.
-			if (settings.generationMode === 'cloud' && param.unsupportedInCloud) continue
-			if (param.type === 'select' && paramOptions(param, settings)) {
+			if (param.type === 'select' && param.options) {
 				// Pick mode-specific options if declared; otherwise the base list.
-				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || paramOptions(param, settings) || []
+				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || param.options || []
 
 				// If current value isn't valid in the new option set, snap back to default.
-				const currentValue = String(paramValues[param.id] ?? paramDefault(param, settings))
+				const currentValue = String(paramValues[param.id] ?? param.default)
 				const valid = effectiveOptions.some(o => o.value === currentValue)
-				if (!valid && param.id !== 'voice') paramValues[param.id] = paramDefault(param, settings)
+				if (!valid && param.id !== 'voice') paramValues[param.id] = param.default
 
 				if (param.id === 'voice') {
-					const config = voiceConfigFor(selectedModel, settings)
+					const config = voiceConfigFor(selectedModel, providerFor(selectedModel))
 					if (config.clone || config.design) {
 						applyInitialVoiceModeDefaults()
 						if (currentType === 'audio' && audioIntent === 'speech') {
@@ -741,7 +704,7 @@ export function showGenerateBar(
 					button.title = param.label
 					button.disabled = (config.clone || config.design) && !config.builtin
 					const updateLabel = () => {
-						button.textContent = voiceDisplayLabel(paramValues, effectiveOptions, paramDefault(param, settings))
+						button.textContent = voiceDisplayLabel(paramValues, effectiveOptions, param.default)
 					}
 					updateLabel()
 					button.addEventListener('click', () => {
@@ -779,7 +742,7 @@ export function showGenerateBar(
 					optEl.textContent = opt.label
 					select.appendChild(optEl)
 				}
-				select.value = String(paramValues[param.id] ?? paramDefault(param, settings))
+				select.value = String(paramValues[param.id] ?? param.default)
 				select.addEventListener('change', () => {
 					paramValues[param.id] = select.value
 					updateRunState()
@@ -787,16 +750,16 @@ export function showGenerateBar(
 				paramsEl.appendChild(select)
 				autoSizeSelect(select)
 			} else if (param.type === 'range') {
-				renderRangeParamDropdown(paramsEl, param, paramValues, settings)
+				renderRangeParamDropdown(paramsEl, param, paramValues)
 			} else if (param.type === 'number') {
 				const input = createEl('input')
 				input.type = 'number'
 				input.className = 'bragi-bar-number'
 				input.title = param.label
 				if (param.min !== undefined) input.min = String(param.min)
-				{ const _m = paramMax(param, settings); if (_m !== undefined) input.max = String(_m) }
+				if (param.max !== undefined) input.max = String(param.max)
 				if (param.step !== undefined) input.step = String(param.step)
-				input.value = String(paramValues[param.id] ?? paramDefault(param, settings))
+				input.value = String(paramValues[param.id] ?? param.default)
 				input.addEventListener('change', () => {
 					const parsed = input.value.trim() ? parseFloat(input.value) : ''
 					paramValues[param.id] = typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : ''
@@ -833,24 +796,19 @@ export function showGenerateBar(
 		if (m.type === 'text') return textUpstreamIssue(m) === null
 		// Image models — always compatible for now
 		if (m.type !== 'video') return true
-		// Use cloud-effective modes so the model-picker doesn't mark a model as "compatible
-		// with upstream X" when the only matching mode is hidden in Cloud Mode (e.g. Veo
-		// first-frame, seedance video-ref). Otherwise the user picks it expecting it to
-		// work, then the runtime refuses.
-		const modes = cloudEffectiveModes(m, settings)
 		// No special inputs — only text-to-video models can run without refs.
-		if (upstreamImageCount === 0 && upstreamVideoCount === 0) return modes.includes('text-to-video')
+		if (upstreamImageCount === 0 && upstreamVideoCount === 0) return m.modes.includes('text-to-video')
 		// Has video input — needs a video-input mode
 		if (upstreamVideoCount > 0) {
-			return modes.includes('video-ref') || modes.includes('video-extend') || modes.includes('video-edit')
+			return m.modes.includes('video-ref') || m.modes.includes('video-extend') || m.modes.includes('video-edit')
 		}
 		// Has 2+ images — needs first-last-frame, multi-image-ref, or image-ref
 		if (upstreamImageCount >= 2) {
-			return modes.includes('first-last-frame') || modes.includes('multi-image-ref') || modes.includes('image-ref')
+			return m.modes.includes('first-last-frame') || m.modes.includes('multi-image-ref') || m.modes.includes('image-ref')
 		}
 		// Has 1 image — needs first-frame or image-ref
 		if (upstreamImageCount === 1) {
-			return modes.includes('first-frame') || modes.includes('image-ref')
+			return m.modes.includes('first-frame') || m.modes.includes('image-ref')
 		}
 		return true
 	}
@@ -896,11 +854,8 @@ export function showGenerateBar(
 		rebuildModeList()
 
 		// Restore saved params AFTER initDefaults (which resets to defaults).
-		// Cloud Mode: strip params that were persisted from a prior Local-mode session
-		// but are now hidden from the UI — otherwise the provider would receive (and refuse) them.
 		if (savedParams) {
-			const filtered = filterCloudUnsupportedKeys(selectedModel, savedParams, settings)
-			paramValues = { ...paramValues, ...filtered }
+			paramValues = { ...paramValues, ...savedParams }
 			applyInitialVoiceModeDefaults()
 		}
 
@@ -965,7 +920,7 @@ export function showGenerateBar(
 			}
 		}
 
-		const voiceConfig = voiceConfigFor(selectedModel, settings)
+		const voiceConfig = voiceConfigFor(selectedModel, providerFor(selectedModel))
 		if (selectedModel?.type === 'audio' && selectedMode === 'tts' && (voiceConfig.clone || voiceConfig.design)) {
 			if (selectedVoiceMode(paramValues) === 'reference') {
 				if (orderedAudios.length === 0) {
@@ -1184,6 +1139,11 @@ export function showBatchGenerateBar(
 		return getEnabledModels(t, settings.modelOrder[orderKey], settings.modelPrefs, configuredProviders)
 	}
 
+	function providerFor(model: ModelConfig | null): string | null {
+		if (!model) return null
+		return resolveProvider(model, settings, configuredProviders).provider
+	}
+
 	const allEnabled = allConfiguredModels(getModelsForType)
 	if (allEnabled.length === 0) {
 		new Notice('Bragi canvas: no models available. Configure API keys in settings.')
@@ -1244,23 +1204,19 @@ export function showBatchGenerateBar(
 		modeSelect.innerHTML = ''
 		if (!selectedModel) { modeSelect.classList.add('bragi-hidden'); selectedMode = null; return }
 
-		// Same Cloud-Mode hide as the main panel (mirror change in the regular rebuildModeList).
-		const unsupported = (settings.generationMode === 'cloud' && selectedModel.unsupportedCloudModes) || []
-		const visibleModes = selectedModel.modes.filter(m => !unsupported.includes(m))
-
-		if (visibleModes.length <= 1) {
+		if (selectedModel.modes.length <= 1) {
 			modeSelect.classList.add('bragi-hidden')
-			selectedMode = visibleModes[0] || null
+			selectedMode = selectedModel.modes[0] || null
 			return
 		}
 		modeSelect.classList.remove('bragi-hidden')
-		for (const mode of visibleModes) {
+		for (const mode of selectedModel.modes) {
 			const opt = createEl('option')
 			opt.value = mode
 			opt.textContent = MODE_LABELS[mode] || mode
 			modeSelect.appendChild(opt)
 		}
-		selectedMode = visibleModes[0]
+		selectedMode = selectedModel.modes[0]
 		modeSelect.value = selectedMode
 		resizeMode()
 	}
@@ -1270,13 +1226,11 @@ export function showBatchGenerateBar(
 		paramValues = {}
 		if (!selectedModel) return
 		for (const p of selectedModel.params) {
-			// Cloud Mode: don't fill defaults for cloud-unsupported params (UI also hides them).
-			if (settings.generationMode === 'cloud' && p.unsupportedInCloud) continue
-			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (paramOptions(p, settings)?.length || 0) === 0
-			if (prev[p.id] !== undefined && (canKeepDynamicVoice || paramOptions(p, settings)?.some(o => o.value === String(prev[p.id])))) {
+			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (p.options?.length || 0) === 0
+			if (prev[p.id] !== undefined && (canKeepDynamicVoice || p.options?.some(o => o.value === String(prev[p.id])))) {
 				paramValues[p.id] = prev[p.id]
 			} else {
-				paramValues[p.id] = paramDefault(p, settings)
+				paramValues[p.id] = p.default
 			}
 		}
 		if (preserveDynamicVoice && typeof prev.voiceLabel === 'string') paramValues.voiceLabel = prev.voiceLabel
@@ -1286,15 +1240,13 @@ export function showBatchGenerateBar(
 		paramsEl.innerHTML = ''
 		if (!selectedModel) return
 		for (const param of selectedModel.params) {
-			// Hide UI controls that the V1 router schema doesn't carry. Local Mode is unaffected.
-			if (settings.generationMode === 'cloud' && param.unsupportedInCloud) continue
-			if (param.type === 'select' && paramOptions(param, settings)) {
-				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || paramOptions(param, settings) || []
-				const currentValue = String(paramValues[param.id] ?? paramDefault(param, settings))
-				if (!effectiveOptions.some(o => o.value === currentValue) && param.id !== 'voice') paramValues[param.id] = paramDefault(param, settings)
+			if (param.type === 'select' && param.options) {
+				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || param.options || []
+				const currentValue = String(paramValues[param.id] ?? param.default)
+				if (!effectiveOptions.some(o => o.value === currentValue) && param.id !== 'voice') paramValues[param.id] = param.default
 
 				if (param.id === 'voice') {
-						const config = voiceConfigFor(selectedModel, settings)
+						const config = voiceConfigFor(selectedModel, providerFor(selectedModel))
 						const button = createEl('button')
 						button.className = 'bragi-bar-voice-btn'
 						button.title = param.label
@@ -1302,7 +1254,7 @@ export function showBatchGenerateBar(
 						const updateLabel = () => {
 							button.textContent = (config.clone || config.design) && !config.builtin
 								? 'Single node only'
-								: voiceDisplayLabel(paramValues, effectiveOptions, paramDefault(param, settings))
+								: voiceDisplayLabel(paramValues, effectiveOptions, param.default)
 						}
 					updateLabel()
 					button.addEventListener('click', () => {
@@ -1340,21 +1292,21 @@ export function showBatchGenerateBar(
 					optEl.textContent = opt.label
 					select.appendChild(optEl)
 				}
-				select.value = String(paramValues[param.id] ?? paramDefault(param, settings))
+				select.value = String(paramValues[param.id] ?? param.default)
 				select.addEventListener('change', () => { paramValues[param.id] = select.value })
 				paramsEl.appendChild(select)
 				autoSizeSelect(select)
 			} else if (param.type === 'range') {
-				renderRangeParamDropdown(paramsEl, param, paramValues, settings)
+				renderRangeParamDropdown(paramsEl, param, paramValues)
 			} else if (param.type === 'number') {
 				const input = createEl('input')
 				input.type = 'number'
 				input.className = 'bragi-bar-number'
 				input.title = param.label
 				if (param.min !== undefined) input.min = String(param.min)
-				{ const _m = paramMax(param, settings); if (_m !== undefined) input.max = String(_m) }
+				if (param.max !== undefined) input.max = String(param.max)
 				if (param.step !== undefined) input.step = String(param.step)
-				input.value = String(paramValues[param.id] ?? paramDefault(param, settings))
+				input.value = String(paramValues[param.id] ?? param.default)
 				input.addEventListener('change', () => {
 					const parsed = input.value.trim() ? parseFloat(input.value) : ''
 					paramValues[param.id] = typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : ''
@@ -1394,7 +1346,7 @@ export function showBatchGenerateBar(
 	}
 
 	function updateRunState() {
-		const config = voiceConfigFor(selectedModel, settings)
+		const config = voiceConfigFor(selectedModel, providerFor(selectedModel))
 		const disabled = !!(selectedModel?.type === 'audio' && selectedMode === 'tts' && (config.clone || config.design) && !config.builtin)
 		runBtn.disabled = disabled
 		runBtn.title = disabled ? 'This model requires a single-node voice source.' : ''

@@ -7,7 +7,6 @@ import type {
 } from './types'
 import type { TextGenProvider, TextGenResult } from './text-gen'
 import { SYSTEM_PROMPT } from './text-gen'
-import { getModelById } from '../models/index'
 
 /**
  * Storyverse Cloud provider — plugin client for the Bragi V1 router.
@@ -51,43 +50,40 @@ const INPUT_ASSETS_MAX: Record<string, number> = {
 	'grok-video': 1,
 }
 
-/**
- * Defensive throw if any param flagged `unsupportedInCloud:true` on the model
- * definition (src/models/*.ts) reaches the provider. The panel hides these
- * controls and skips them when filling `paramValues` in Cloud Mode, so under
- * normal flow they never get here. This guard catches non-panel entry points
- * (MCP tools, scripted calls) — and crucially makes the contract symmetric
- * with the UI: a value present at all means the caller thinks it's supported,
- * and we refuse rather than silently drop.
- *
- * Source of truth is the model definition's `unsupportedInCloud` flag —
- * adding a new model with such a param automatically propagates here, with
- * no separate hand-written allowlist to keep in sync.
- */
 /** Throw if more refs are attached than the router schema accepts for this model. */
 function refuseTooManyRefs(modelId: string, refs: string[] | undefined): void {
 	if (!refs || refs.length === 0) return
 	const max = INPUT_ASSETS_MAX[modelId]
 	if (max === undefined || refs.length <= max) return
 	throw new Error(
-		`Storyverse: ${modelId} via Cloud Mode accepts at most ${max} reference asset${max === 1 ? '' : 's'} ` +
-		`(router schema limit); ${refs.length} attached. Detach extras or use Local Mode.`,
+		`Storyverse: ${modelId} accepts at most ${max} reference asset${max === 1 ? '' : 's'} ` +
+		`(router schema limit); ${refs.length} attached. Detach extras or pick a different provider for this model.`,
 	)
 }
 
-function refuseCloudUnsupportedParams(modelId: string, p: Record<string, unknown>): void {
-	const model = getModelById(modelId)
-	if (!model) return
-	for (const param of model.params) {
-		if (!param.unsupportedInCloud) continue
-		const value = p[param.id]
-		if (value === undefined || value === null || value === '') continue
-		throw new Error(
-			`Storyverse: parameter "${param.id}" is not supported in Cloud Mode V1 for ${modelId} ` +
-			`(router schema has no such field). The panel should hide this control in Cloud Mode; ` +
-			`if you're calling via MCP or a script, omit the field. Use Local Mode if you need it.`,
-		)
-	}
+/**
+ * Plugin grok-tts voice options use xAI-style names (eve/ara/leo/rex/sal); the
+ * router accepts OpenAI-style names (alloy/echo/fable/onyx/nova/shimmer).
+ * Map at the provider boundary so the rest of the plugin doesn't need to know
+ * which provider is serving grok-tts.
+ */
+const GROK_TTS_VOICE_REMAP: Record<string, string> = {
+	eve: 'nova',
+	ara: 'shimmer',
+	leo: 'onyx',
+	rex: 'echo',
+	sal: 'fable',
+}
+function remapGrokTtsVoice(plugin: string): string {
+	return GROK_TTS_VOICE_REMAP[plugin] || 'alloy'
+}
+
+/**
+ * Plugin midjourney quality is a cost-tier ('1' = standard, '4' = high-cost),
+ * router enum is low/medium/high. Map at the provider boundary.
+ */
+function remapMidjourneyQuality(plugin: string): 'medium' | 'high' {
+	return plugin === '4' ? 'high' : 'medium'
 }
 
 interface RouterOutput { kind?: string; url?: string; text?: string; mime_type?: string }
@@ -131,12 +127,20 @@ function sanitizeRouterMessage(raw: unknown): string {
 		|| 'router error'
 }
 
-/** OpenAI gpt-image-2 takes a pixel `size`, not an aspect ratio. */
+/** OpenAI gpt-image-2 takes a pixel `size`, not an aspect ratio. Router only supports
+ *  three sizes; any other ratio is refused up front so the user sees a clear error
+ *  rather than a silently-wrong square. */
 function aspectToSize(aspectRatio: unknown): string {
-	switch (str(aspectRatio)) {
+	const ar = str(aspectRatio, '1:1')
+	switch (ar) {
+		case '1:1':  return '1024x1024'
 		case '16:9': return '1792x1024'
 		case '9:16': return '1024x1792'
-		default: return '1024x1024'
+		default:
+			throw new Error(
+				`Storyverse: gpt-image-2 only supports 1:1 / 16:9 / 9:16 aspect ratios (router schema limit); ` +
+				`got "${ar}". Pick a supported ratio or use a different provider for this model.`,
+			)
 	}
 }
 
@@ -302,7 +306,6 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 
 	async generateImage(prompt: string, params: Record<string, unknown> = {}): Promise<GenerateImageResult> {
 		const model = str(params.modelId)
-		refuseCloudUnsupportedParams(model, params)
 		const refs = IMAGE_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
 		refuseTooManyRefs(model, refs)
 		const inputAssets = await this.uploadAssets(refs)
@@ -325,9 +328,9 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 		const assets = inputAssets.length ? { input_assets: inputAssets } : {}
 		switch (model) {
 			case 'gpt-image-2':
-				// imageSize / quality flagged `unsupportedInCloud:true` on the gpt-image-2 model —
-				// the panel hides those controls, paramValues skips them, and
-				// refuseCloudUnsupportedParams throws if anything still slips through.
+				// Router gpt-image-2 schema accepts size ∈ {1024x1024, 1792x1024, 1024x1792} (no imageSize/quality
+				// fields). Plugin params imageSize / quality are passed through — the upstream provider's API
+				// either accepts them or doesn't. aspectToSize throws on ratios outside the supported three.
 				return { model, prompt, n: 1, size: aspectToSize(p.aspectRatio), ...assets }
 			case 'nano-banana-pro':
 			case 'nano-banana-2':
@@ -339,9 +342,8 @@ export class StoryverseImageProvider extends StoryverseClient implements ImagePr
 				return { model, prompt, aspectRatio: str(p.aspectRatio, '1:1') }
 			case 'midjourney-v8':
 			case 'midjourney-niji-7':
-				// cloud panel exposes medium/high directly via the param's cloudOptions+cloudDefault —
-				// no remap needed here. Local-mode midjourney would never reach this branch.
-				return { model, prompt, quality: str(p.quality, 'medium'), ...(model === 'midjourney-niji-7' ? { niji: true } : {}) }
+				// Plugin quality is '1'/'4' (cost tier); router enum is low/medium/high. Map at the boundary.
+				return { model, prompt, quality: remapMidjourneyQuality(str(p.quality, '1')), ...(model === 'midjourney-niji-7' ? { niji: true } : {}) }
 			default:
 				return { model, prompt, ...assets }
 		}
@@ -354,7 +356,6 @@ export class StoryverseVideoProvider extends StoryverseClient implements VideoPr
 
 	async generateVideo(prompt: string, params: Record<string, unknown> = {}): Promise<GenerateVideoResult> {
 		const model = str(params.modelId)
-		refuseCloudUnsupportedParams(model, params)
 		const refs = VIDEO_MODELS_ACCEPTING_REFS.has(model) ? (params.refImages as string[] | undefined) : undefined
 		refuseTooManyRefs(model, refs)
 		const inputAssets = await this.uploadAssets(refs)
@@ -395,26 +396,22 @@ export class StoryverseVideoProvider extends StoryverseClient implements VideoPr
 			case 'seedance-2.0-fast':
 				return { model, prompt, duration: str(p.duration, '-1'), ratio: str(p.ratio, '16:9'), generate_audio: bool(p.generate_audio, true), ...assets }
 			case 'grok-video':
-				// Router schema requires `input_assets.min(1)`; text-to-video and video-extend
-				// modes (no image ref) would 400. The panel hides those modes in Cloud Mode
-				// (unsupportedCloudModes on grok-video); throw here too so non-panel callers
-				// (MCP, scripted) get a clear error instead of a router 400.
+				// Router schema requires `input_assets.min(1)`; non-panel callers (MCP, scripted)
+				// might hit text-to-video / video-extend without a ref — pre-empt with a clear error
+				// rather than letting it 400 at the router.
 				if (inputAssets.length === 0) {
-					throw new Error('Storyverse: grok-video via Cloud Mode requires a reference image (text-to-video / video-extend modes are not supported by the V1 router schema). Attach an image upstream or use Local Mode.')
+					throw new Error('Storyverse: grok-video requires a reference image (V1 router schema does not support text-to-video / video-extend). Attach an image upstream or pick a different provider for this model.')
 				}
 				return { model, prompt, duration: '6', input_assets: inputAssets }
 			case 'veo-3.1':
 			case 'veo-3.1-lite': {
 				// V1 router /v1/videos/generations Veo schema accepts only { prompt, aspectRatio }
-				// — no input_assets, no duration, no resolution. The plugin UI exposes first-frame /
-				// first-last-frame / image-ref modes + durationSeconds + resolution, all of which
-				// can't be served by the current router. Detect refuse refs by inspecting the user's
-				// `refImages` directly (inputAssets is already empty here because veo isn't in
-				// VIDEO_MODELS_ACCEPTING_REFS — we drop refs before reaching this branch).
-				// duration/resolution are silently dropped (V2 router will extend the Veo schema).
+				// — no input_assets, no duration, no resolution. Detect ref usage by inspecting the
+				// user's `refImages` directly (inputAssets is already empty here because veo isn't
+				// in VIDEO_MODELS_ACCEPTING_REFS — we drop refs before reaching this branch).
 				const userRefs = (p.refImages as string[] | undefined) || []
 				if (userRefs.length > 0) {
-					throw new Error('Storyverse: Veo via Cloud Mode does not support reference frames in V1. Use Local Mode or wait for V2 router schema upgrade.')
+					throw new Error('Storyverse: Veo does not support reference frames in the V1 router schema. Pick a different provider or wait for the V2 router upgrade.')
 				}
 				return { model, prompt, aspectRatio: str(p.aspectRatio, '16:9') }
 			}
@@ -454,7 +451,6 @@ export class StoryverseAudioProvider extends StoryverseClient implements AudioPr
 
 	async generateAudio(prompt: string, options: { mode: 'tts' | 'music' | 'sound-effect'; modelId?: string; [k: string]: unknown }): Promise<GenerateAudioResult> {
 		const model = str(options.modelId)
-		refuseCloudUnsupportedParams(model, options)
 		const { path, body } = this.buildRequest(model, prompt, options)
 		const resp = await requestUrl({
 			url: `${this.baseUrl}${path}`,
@@ -486,7 +482,8 @@ export class StoryverseAudioProvider extends StoryverseClient implements AudioPr
 	private buildRequest(model: string, prompt: string, p: Record<string, unknown>): { path: string; body: Record<string, unknown> } {
 		switch (model) {
 			case 'grok-tts':
-				return { path: '/v1/audio/speech', body: { model, input: prompt, voice: str(p.voice, 'alloy'), response_format: str(p.response_format, 'mp3'), speed: num(p.speed, 1) } }
+				// Plugin voice options are xAI-style names; router enum is OpenAI-style. Remap at the boundary.
+				return { path: '/v1/audio/speech', body: { model, input: prompt, voice: remapGrokTtsVoice(str(p.voice, 'eve')), response_format: str(p.response_format, 'mp3'), speed: num(p.speed, 1) } }
 			case 'elevenlabs-tts-v3':
 				return { path: '/v1/audio/speech', body: { model, input: prompt, voice: str(p.voice), response_format: str(p.response_format, 'mp3') } }
 			case 'elevenlabs-music':

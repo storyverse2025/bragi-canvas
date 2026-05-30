@@ -27,7 +27,6 @@ export const midjourneyV8: ModelConfig = {
 				{ label: '21:9', value: '21:9' },
 			],
 			default: '1:1',
-			unsupportedInCloud: true,
 		},
 		{
 			id: 'quality',
@@ -38,13 +37,6 @@ export const midjourneyV8: ModelConfig = {
 				{ label: 'High (4x cost)', value: '4' },
 			],
 			default: '1',
-			// Router midjourney quality enum is low/medium/high. Plugin's Local-mode 1/4 maps
-			// to a "Midjourney cost multiplier" concept; in cloud, expose the router's labels.
-			cloudOptions: [
-				{ label: 'Medium', value: 'medium' },
-				{ label: 'High',   value: 'high' },
-			],
-			cloudDefault: 'medium',
 		},
 		{
 			id: 'stylize',
@@ -54,7 +46,6 @@ export const midjourneyV8: ModelConfig = {
 			max: 1000,
 			step: 50,
 			default: 100,
-			unsupportedInCloud: true,
 		},
 	],
 }
@@ -83,7 +74,6 @@ export const midjourneyNiji7: ModelConfig = {
 				{ label: '2:3', value: '2:3' },
 			],
 			default: '1:1',
-			unsupportedInCloud: true,
 		},
 		{
 			id: 'stylize',
@@ -93,7 +83,6 @@ export const midjourneyNiji7: ModelConfig = {
 			max: 1000,
 			step: 50,
 			default: 100,
-			unsupportedInCloud: true,
 		},
 	],
 }

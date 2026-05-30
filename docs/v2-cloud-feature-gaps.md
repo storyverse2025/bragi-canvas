@@ -1,34 +1,106 @@
-# V2 Cloud Mode — feature gaps & follow-up PRs
+# V2 Storyverse Router — feature gaps & follow-up PRs
 
-V1 Cloud Mode (PR #3) prioritized "main generation path works end-to-end" over
-"every UI control transparently flows through the router." The result: a number
-of UI controls and modes that **work in Local Mode** are hidden in Cloud Mode
-because the V1 router schema doesn't carry them yet. None of these are upstream
-API limitations — they're all schema simplifications in `server/src/schemas/*`
-that V2 can close. (A handful are real upstream limits and called out below as
-"won't fix".)
+> **2026-05-29 update — PR #3 architectural refactor.** R1-R7 added a plugin-side
+> "Cloud Mode" abstraction (a `generationMode` toggle, `unsupportedInCloud` /
+> `unsupportedCloudModes` flags, a `cloud-overrides.ts` helper, hide-and-refuse
+> logic across panel.ts + mcp-tool-registry.ts + storyverse.ts). Simon's review
+> pointed out the right shape: Storyverse is just an AI gateway like
+> tokenrouter/fal — the plugin should know nothing about its schema beyond
+> "this provider supports these model ids." We reverted the abstraction:
+> Storyverse is now a standard multi-field `ProviderSpec` and per-model schema
+> drift is server-side only.
+>
+> The follow-ups below are still valid as a server-side roadmap (which router
+> schemas to extend), but the **plugin-side work** for each item simplifies:
+> just extend `buildBody` in `src/providers/storyverse.ts` to forward the new
+> field, no plugin model flag to remove.
+
+V1 Storyverse (PR #3) prioritized "main generation path works end-to-end" over
+"every UI control transparently flows through the router." A number of UI
+controls and modes that **work via other providers** silently 400 if the user
+selects Storyverse for that model. None of these are upstream API limitations —
+they're all schema simplifications in `server/src/schemas/*` that V2 can close.
+(A handful are real upstream limits and called out below as "won't fix".)
 
 This file is the canonical V2 todo. When opening a follow-up PR, link it here.
 
 ## How V1 currently handles the gap
 
-For each cloud-unsupported control:
-- The plugin model definition flags it (`ModelParam.unsupportedInCloud: true`
-  for params; `ModelConfig.unsupportedCloudModes: Mode[]` for modes).
-- `src/panel.ts` hides the control from the UI in Cloud Mode (`rebuildParams`,
-  `rebuildModeList`, `voiceConfigFor`).
-- `src/providers/storyverse.ts` throws defensively if a non-panel caller (MCP,
-  scripts) sends the field anyway (`refuseCloudUnsupportedParams` + per-model
-  guards).
-- Integration tests assert anti-drift so adding new model+param doesn't silently
-  reintroduce a hidden silent-drop.
+After the refactor: the plugin sends whatever the panel collected; the router
+either accepts it or returns 400; the user sees the router's error. There is no
+plugin-side "is this param allowed" gating. The only client-side throws left
+are the few cases where letting the request reach the router would 400 with a
+worse error (Veo `refImages` with no input_assets schema; grok-video text-to-
+video with no input_assets; ref-count overflow per model).
 
 V2 PRs should:
 1. Implement the field in `server/src/schemas/*.ts` (and the adapter).
-2. Wire `src/providers/storyverse.ts` to forward the value.
-3. Remove the corresponding `unsupportedInCloud` / `unsupportedCloudModes` flag.
-4. Delete the now-stale integration test assertions (the invariants will
-   automatically stop tripping once the flags are gone).
+2. Wire `src/providers/storyverse.ts` `buildBody` to forward the value.
+3. (No plugin model file changes needed — model defs are provider-agnostic.)
+
+## V3 — dynamic model manifest (full "AI Gateway" direction)
+
+V1 + V2 keep the plugin's static model registry (`src/models/*.ts`) as the
+canonical list — V2 just makes more router fields wired through. V3 is the
+architectural step that eliminates the static list and makes the **server the
+single source of truth** for the model catalog.
+
+### Server contract (`GET /v1/models` manifest)
+
+Per model:
+- `id` — router-side model id
+- `type` — `image | video | text | audio`
+- `modes` — array of `'text-to-image' | 'image-ref-to-image' | 'first-frame' | 'text-to-video' | 'tts' | 'music' | …`
+- `params` — array of `{ id, label, type: 'select'|'range'|'number', options?, default, min?, max?, step?, unit? }`
+- `inputAssets` — per-mode `{ accepts: ('image'|'video'|'audio')[], min, max }`
+- `textMultimodal` (text models only) — `{ kinds: ('image'|'pdf'|'video'|'audio')[], maxImages?, maxVideos?, maxAudios?, maxPdfs?, maxPdfBytes? }`
+- `audioVoice` (audio TTS models only) — `{ builtin, clone, design }`
+- `cost` — pricing metadata (cents per generation, token rates, …)
+- `status` — `'available' | 'deprecated' | 'disabled'` (+ optional `deprecationMessage`)
+- `manifestVersion` — integer for plugin-side compatibility checks
+
+### Plugin changes
+
+- `ALL_MODELS` in `src/models/index.ts` becomes `STATIC_MODELS` + dynamic merge
+  with server-fetched manifest. Static list is the fallback when manifest is
+  unreachable (so the plugin still works offline with whatever models it knew
+  about last time).
+- `getEnabledModels` accepts a mixed source: static + remote. Remote-only models
+  render with `provider: storyverse` exclusively.
+- Panel param UI (`rebuildParams` in `src/panel.ts`) renders from manifest
+  schema instead of static `ModelConfig.params`.
+- MCP `list_models` and `generate` (`src/mcp-tool-registry.ts`) consume the
+  manifest for schema validation.
+- `modelPrefs[id]` / `modelOrder[type]` / `lastSelection.modelId` migration when
+  the server renames or deprecates a model.
+- Offline cache: store last good manifest in `data.json` (`manifestFetchedAt`,
+  `manifest`). On startup load cache first, refresh in background. If fetch
+  fails on first install, fall back to `STATIC_MODELS` with a Notice.
+- `manifestVersion` compatibility: plugin declares min version it understands;
+  older server response → ignore + use static fallback + log. Newer is fine
+  (forward-compatible — unknown fields ignored).
+- Test coverage: panel UI rendering from synthetic manifest fixtures; MCP
+  `list_models` shape; migration for deprecated/renamed models; offline cache
+  fallback; manifest-fetch-fails-on-first-install fallback.
+
+### What survives V3
+
+- `ProviderSpec` registry pattern — storyverse stays a multi-field provider
+  (URL + token).
+- `StoryverseImageProvider/Video/Text/Audio` capability classes — still
+  translate the generic generation call into router HTTP. They stop
+  hard-coding model-id branches in `buildBody`; instead the manifest describes
+  what fields to send.
+- `migrateStoryverseProvider` — keeps running once for legacy
+  `bragiCloudUrl`/`bragiToken` users.
+
+### Why V3 (not V2)
+
+V2 is scoped as "close the schema gaps for the existing 23 static-list models"
+(extending Veo `input_assets`, grok-video `duration`, ElevenLabs Music length,
+etc.). V3 eliminates the static list itself. They're independent — V2 lands as
+its own PR sequence; V3 is the next architectural step after V2 closes the
+obvious wire-level gaps.
 
 ---
 

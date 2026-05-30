@@ -23,8 +23,6 @@ export const grokImagine: ModelConfig = {
 		fal: { apiModelId: 'xai/grok-imagine-image' },
 	},
 	modes: ['text-to-image', 'image-ref-to-image'],
-	// Router grok-imagine schema has no input_assets → image-ref mode can't be served
-	unsupportedCloudModes: ['image-ref-to-image'],
 	params: [
 		{
 			id: 'aspectRatio',
@@ -32,11 +30,6 @@ export const grokImagine: ModelConfig = {
 			type: 'select',
 			options: GROK_IMAGE_RATIOS,
 			default: '1:1',
-			cloudOptions: [
-				{ label: '1:1', value: '1:1' },
-				{ label: '16:9', value: '16:9' },
-				{ label: '9:16', value: '9:16' },
-			],
 		},
 		{
 			id: 'quality',
@@ -47,10 +40,6 @@ export const grokImagine: ModelConfig = {
 				{ label: 'Normal', value: 'normal' },
 			],
 			default: 'quality',
-			// Router /v1/images/generations schema for grok-imagine accepts only
-			// { prompt, aspectRatio } — no `quality` field. The storyverse provider also
-			// doesn't forward it. Hide in cloud so the choice isn't silently dropped.
-			unsupportedInCloud: true,
 		},
 	],
 }
@@ -65,7 +54,6 @@ export const grokVideo: ModelConfig = {
 		fal: { apiModelId: 'xai/grok-imagine-video' },
 	},
 	modes: ['text-to-video', 'first-frame', 'image-ref', 'video-extend'],
-	unsupportedCloudModes: ['text-to-video', 'video-extend'],
 	params: [
 		{
 			id: 'duration',
@@ -84,7 +72,6 @@ export const grokVideo: ModelConfig = {
 				],
 			},
 			default: '5',
-			unsupportedInCloud: true,
 		},
 		{
 			id: 'aspect_ratio',
@@ -100,7 +87,6 @@ export const grokVideo: ModelConfig = {
 				{ label: '2:3', value: '2:3' },
 			],
 			default: '16:9',
-			unsupportedInCloud: true,
 		},
 		{
 			id: 'resolution',
@@ -112,7 +98,6 @@ export const grokVideo: ModelConfig = {
 				{ label: '1080p', value: '1080p' },
 			],
 			default: '720p',
-			unsupportedInCloud: true,
 		},
 	],
 }

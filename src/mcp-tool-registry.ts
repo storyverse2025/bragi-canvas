@@ -9,7 +9,6 @@ import { getModelById, getActiveProvider, getEnabledModels } from './models/inde
 import { getTextInputCapability, listSupportedInputLabels, listUnsupportedInputLabels } from './models/text-input-capabilities'
 import { getConfiguredProviderIds } from './providers/registry'
 import type { GenerationType, Mode } from './models/types'
-import { cloudEffectiveModes, cloudEffectiveOptions, cloudEffectiveMax, cloudEffectiveDefault, isParamHiddenInCloud, isModeAllowed, normalizeCloudParamValue } from './models/cloud-overrides'
 import { getUpstreamInputs } from './edge-parser'
 import { getOrderedTextRefs } from './text-refs'
 import { getOrderedImages } from './ref-thumbnails'
@@ -441,32 +440,24 @@ export function createMcpToolRegistry(ctx: McpToolContext): McpToolDef[] {
 						const capability = m.type === 'text'
 							? getTextInputCapability(m.id, provider, apiModelId)
 							: null
-						// Cloud-aware view: hide modes / params the V1 router schema can't carry,
-						// and substitute cloudOptions / cloudDefault / cloudMax so the MCP caller
-						// sees the same surface as the panel UI.
-						const visibleParams = m.params.filter(p => !isParamHiddenInCloud(p, settings))
 						result.push({
 							id: m.id,
 							name: m.name,
 							type: m.type,
 							provider,
-							modes: cloudEffectiveModes(m, settings),
+							modes: m.modes,
 							...(capability ? {
 								supportedInputs: listSupportedInputLabels(capability),
 								unsupportedInputs: listUnsupportedInputLabels(capability),
 							} : {}),
-							params: visibleParams.map(p => {
-								const opts = cloudEffectiveOptions(p, settings)
-								const mx = cloudEffectiveMax(p, settings)
-								return {
-									id: p.id,
-									label: p.label,
-									type: p.type,
-									default: cloudEffectiveDefault(p, settings),
-									...(opts ? { options: opts } : {}),
-									...(p.min !== undefined ? { min: p.min, max: mx, step: p.step, unit: p.unit } : {}),
-								}
-							}),
+							params: m.params.map(p => ({
+								id: p.id,
+								label: p.label,
+								type: p.type,
+								default: p.default,
+								...(p.options ? { options: p.options } : {}),
+								...(p.min !== undefined ? { min: p.min, max: p.max, step: p.step, unit: p.unit } : {}),
+							})),
 						})
 					}
 				}
@@ -536,47 +527,13 @@ export function createMcpToolRegistry(ctx: McpToolContext): McpToolDef[] {
 				}
 				if (!prompt) throw new Error('Node contains no prompt text')
 
-				// Mode default respects unsupportedCloudModes. If the caller explicitly passes a
-				// mode that isn't cloud-effective for this model, refuse clearly instead of
-				// quietly running with a different mode (R7: previously `mode || effectiveModes[0]`
-				// would let veo first-frame / seedance video-ref / grok-video text-to-video sneak
-				// past in Cloud Mode).
-				const effectiveModes = cloudEffectiveModes(model, settings)
-				if (mode && !isModeAllowed(model, mode as Mode, settings)) {
-					throw new Error(
-						`Mode "${mode}" is not supported in Cloud Mode for ${model.id}. ` +
-						`Available: ${effectiveModes.join(', ') || '(none)'}`,
-					)
-				}
-				const selectedMode = (mode as Mode) || effectiveModes[0] || model.modes[0] || null
+				const selectedMode = (mode as Mode) || model.modes[0] || null
 
-				// Resolve params:
-				//  - hidden in cloud → drop (panel also hides them)
-				//  - caller supplied a value → normalize against cloud-effective options/max;
-				//    if normalize returns undefined the value is unrecoverable (e.g. select
-				//    not in cloudOptions) → throw clearly so the caller knows their UI choice
-				//    won't be silently downgraded
-				//  - no value supplied → fill cloudEffectiveDefault
+				// Fill defaults for any params the caller didn't pass; pass-through caller values as-is.
 				const resolvedParams: Record<string, string | number> = { ...(params || {}) }
 				for (const p of model.params) {
-					if (isParamHiddenInCloud(p, settings)) {
-						delete resolvedParams[p.id]
-						continue
-					}
-					const provided = resolvedParams[p.id]
-					if (provided !== undefined) {
-						const norm = normalizeCloudParamValue(p, provided, settings)
-						if (norm === undefined) {
-							const opts = cloudEffectiveOptions(p, settings)
-							const optList = opts ? opts.map(o => o.value).join(', ') : ''
-							throw new Error(
-								`Parameter "${p.id}"=${JSON.stringify(provided)} is not supported in Cloud Mode for ${model.id}` +
-								(optList ? `. Allowed values: ${optList}` : '. (cloud-unsupported field)'),
-							)
-						}
-						resolvedParams[p.id] = norm
-					} else {
-						resolvedParams[p.id] = cloudEffectiveDefault(p, settings)
+					if (resolvedParams[p.id] === undefined) {
+						resolvedParams[p.id] = p.default
 					}
 				}
 

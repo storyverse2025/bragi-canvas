@@ -80,8 +80,7 @@ export class AddProviderModal extends Modal {
 		})
 		const listEl = contentEl.createDiv({ cls: 'bragi-add-modal-list' })
 
-		// `storyverse` is driven by Cloud Mode settings, not the generic key-based catalog.
-		const candidates = PROVIDERS.filter(p => p.id !== 'storyverse' && !p.isConfigured(this.plugin.settings))
+		const candidates = PROVIDERS.filter(p => !p.isConfigured(this.plugin.settings))
 		if (candidates.length === 0) {
 			listEl.createEl('p', { text: 'All supported providers are already added.', cls: 'mod-muted' })
 			return

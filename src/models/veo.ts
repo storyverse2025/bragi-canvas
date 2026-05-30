@@ -11,7 +11,6 @@ const VEO_PARAMS = [
 			{ label: '8s', value: '8' },
 		],
 		default: '6',
-		unsupportedInCloud: true,
 	},
 	{
 		id: 'aspectRatio',
@@ -32,7 +31,6 @@ const VEO_PARAMS = [
 			{ label: '1080p', value: '1080p' },
 		],
 		default: '720p',
-		unsupportedInCloud: true,
 	},
 ]
 
@@ -46,7 +44,6 @@ export const veo31: ModelConfig = {
 		fal: { apiModelId: 'fal-ai/veo3.1' },
 	},
 	modes: ['text-to-video', 'first-frame', 'first-last-frame', 'image-ref'],
-	unsupportedCloudModes: ['first-frame', 'first-last-frame', 'image-ref'],
 	params: VEO_PARAMS,
 }
 
@@ -59,6 +56,5 @@ export const veo31Lite: ModelConfig = {
 		gemini: { apiModelId: 'veo-3.1-lite-generate-preview' },
 	},
 	modes: ['text-to-video', 'first-frame'],
-	unsupportedCloudModes: ['first-frame'],
 	params: VEO_PARAMS,
 }

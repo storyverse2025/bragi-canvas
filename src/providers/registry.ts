@@ -485,23 +485,30 @@ export const PROVIDERS: ProviderSpec[] = [
 		},
 	},
 	{
-		// Bragi Cloud router. Not a per-key provider — driven by the top-level Cloud Mode
-		// settings (generationMode/bragiCloudUrl/bragiToken), so it has no `fields` and is
-		// hidden from the generic "add provider" catalog. The router picks the real provider
-		// per model, so the plugin sends only `model` (apiModelId) — never a provider.
+		// Storyverse router — an AI gateway exposing many upstream models behind one svsk- token.
+		// Treated exactly like a standard multi-field provider (URL + Token) so users add it via
+		// the normal Add Provider flow and pick it per-model just like OpenAI / fal / etc.
 		id: 'storyverse',
-		name: 'Storyverse Cloud',
-		description: 'Bragi Cloud router — one token, server-side provider keys.',
-		fields: [],
-		isConfigured: (s) => s.generationMode === 'cloud' && !!s.bragiCloudUrl && !!s.bragiToken,
+		name: 'Storyverse',
+		description: 'AI gateway routing to multiple upstream providers behind one svsk- token.',
+		docUrl: 'https://github.com/storyverse2025/bragi-canvas/blob/main/server/README.md',
+		fields: [
+			{ key: 'storyverseUrl',   label: 'Router URL', placeholder: 'https://...', type: 'text' },
+			{ key: 'storyverseToken', label: 'Token (svsk-...)', placeholder: 'svsk-...', type: 'password' },
+		],
+		isConfigured: (s) => !!(s.providers.storyverseUrl && s.providers.storyverseToken),
 		makeImage: ({ settings, app, outputDir }) =>
-			new StoryverseImageProvider(settings.bragiCloudUrl, settings.bragiToken, app, outputDir),
+			new StoryverseImageProvider(settings.providers.storyverseUrl, settings.providers.storyverseToken, app, outputDir),
 		makeVideo: ({ settings, app, outputDir }) =>
-			new StoryverseVideoProvider(settings.bragiCloudUrl, settings.bragiToken, app, outputDir),
+			new StoryverseVideoProvider(settings.providers.storyverseUrl, settings.providers.storyverseToken, app, outputDir),
 		makeText: ({ settings, app, outputDir }) =>
-			new StoryverseTextProvider(settings.bragiCloudUrl, settings.bragiToken, app, outputDir),
+			new StoryverseTextProvider(settings.providers.storyverseUrl, settings.providers.storyverseToken, app, outputDir),
 		makeAudio: ({ settings, app, outputDir }) =>
-			new StoryverseAudioProvider(settings.bragiCloudUrl, settings.bragiToken, app, outputDir),
+			new StoryverseAudioProvider(settings.providers.storyverseUrl, settings.providers.storyverseToken, app, outputDir),
+		testConnection: async (draft) => {
+			const { testStoryverseAuth } = await import('./storyverse')
+			return testStoryverseAuth(draft.storyverseUrl || '', draft.storyverseToken || '')
+		},
 	},
 ]
 
@@ -510,15 +517,7 @@ export function getProvider(id: string): ProviderSpec | undefined {
 }
 
 export function getConfiguredProviderIds(settings: BragiSettings): string[] {
-	// Cloud Mode: the router is the only provider. Returning exactly ['storyverse']
-	// (when configured) makes getActiveProvider resolve every router-backed model to
-	// storyverse and filters out models the router can't serve — without touching any
-	// Local-Mode code path. See PR #2 design.
-	if (settings.generationMode === 'cloud') {
-		const sv = getProvider('storyverse')
-		return sv?.isConfigured(settings) ? ['storyverse'] : []
-	}
-	return PROVIDERS.filter(p => p.id !== 'storyverse' && p.isConfigured(settings)).map(p => p.id)
+	return PROVIDERS.filter(p => p.isConfigured(settings)).map(p => p.id)
 }
 
 /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- Resume strict linting after the runtime-shaped data boundary. */

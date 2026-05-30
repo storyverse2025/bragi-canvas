@@ -38,14 +38,6 @@ export const gptImage: ModelConfig = {
 			type: 'select',
 			options: GPT_IMAGE_RATIOS,
 			default: '1:1',
-			// Router gpt-image-2 size enum maps 1:1→1024x1024, 16:9→1792x1024, 9:16→1024x1792.
-			// Anything else would have been silently downgraded by aspectToSize() to 1024x1024
-			// (user picks 4:3 → square output) — restrict the UI to what truly works in cloud.
-			cloudOptions: [
-				{ label: '1:1', value: '1:1' },
-				{ label: '16:9', value: '16:9' },
-				{ label: '9:16', value: '9:16' },
-			],
 		},
 		{
 			id: 'imageSize',
@@ -58,7 +50,6 @@ export const gptImage: ModelConfig = {
 				{ label: '4K', value: '4K' },
 			],
 			default: '2K',
-			unsupportedInCloud: true,
 		},
 		{
 			id: 'quality',
@@ -71,7 +62,6 @@ export const gptImage: ModelConfig = {
 				{ label: 'High', value: 'high' },
 			],
 			default: 'auto',
-			unsupportedInCloud: true,
 		},
 	],
 }

@@ -21,11 +21,6 @@ const PRO_ASPECT_RATIOS = FULL_ASPECT_RATIOS.filter(
 	(ratio) => !['1:4', '4:1', '1:8', '8:1'].includes(ratio.value),
 )
 
-// Router /v1/images/generations nano-banana schema accepts only this subset.
-const NANO_BANANA_CLOUD_RATIOS = FULL_ASPECT_RATIOS.filter(
-	(r) => ['1:1', '16:9', '9:16', '4:3', '3:4'].includes(r.value),
-)
-
 export const nanoBananaPro: ModelConfig = {
 	id: 'nano-banana-pro',
 	name: 'Nano Banana Pro',
@@ -45,7 +40,6 @@ export const nanoBananaPro: ModelConfig = {
 			type: 'select',
 			options: PRO_ASPECT_RATIOS,
 			default: '1:1',
-			cloudOptions: NANO_BANANA_CLOUD_RATIOS,
 		},
 		{
 			id: 'imageSize',
@@ -57,7 +51,6 @@ export const nanoBananaPro: ModelConfig = {
 				{ label: '4K', value: '4K' },
 			],
 			default: '1K',
-			unsupportedInCloud: true,
 		},
 	],
 }
@@ -81,7 +74,6 @@ export const nanoBanana2: ModelConfig = {
 			type: 'select',
 			options: FULL_ASPECT_RATIOS,
 			default: '1:1',
-			cloudOptions: NANO_BANANA_CLOUD_RATIOS,
 		},
 		{
 			id: 'imageSize',
@@ -94,7 +86,6 @@ export const nanoBanana2: ModelConfig = {
 				{ label: '4K', value: '4K' },
 			],
 			default: '1K',
-			unsupportedInCloud: true,
 		},
 	],
 }
