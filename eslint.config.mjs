@@ -15,6 +15,11 @@ export default defineConfig([
 			'main.js',
 			'package-lock.json',
 			'src/mcp-server.ts',
+			// The server/ subtree has its own tsconfig + eslint config — lint it from there,
+			// not from the plugin root. Without this carve-out, the plugin's typed @typescript-eslint
+			// rules try to load server files under the plugin's tsconfig and fail because the
+			// server files aren't in the project graph (parserOptions.project is plugin-only).
+			'server/**',
 		],
 	},
 	...obsidianmd.configs.recommended,

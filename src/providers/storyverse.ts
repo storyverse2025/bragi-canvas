@@ -50,6 +50,55 @@ const INPUT_ASSETS_MAX: Record<string, number> = {
 	'grok-video': 1,
 }
 
+/**
+ * Per-model params declared in the plugin model file that the V1 router schema does NOT
+ * forward to the upstream provider. The router's Zod schemas default to stripping unknown
+ * fields, so omitting these from buildBody would mean the user's UI choice silently has
+ * no effect.
+ *
+ * panel.ts + mcp-tool-registry.ts read this table and hide the params from the UI / MCP
+ * surface when the active provider is storyverse, so the user never picks a value that
+ * silently won't be used. storyverse.ts buildBody is the second line of defense — it
+ * doesn't insert these field names into the request body either.
+ *
+ * When the V2 router PR adds a field to the schema + adapter, remove it here in the same
+ * commit so the panel exposes it again.
+ */
+export const STORYVERSE_NOOP_PARAMS: Readonly<Record<string, readonly string[]>> = {
+	'nano-banana-pro': ['imageSize'],
+	'nano-banana-2': ['imageSize'],
+	'seedream-4.5': ['resolution'],
+	'seedream-5.0': ['resolution'],
+	'gpt-image-2': ['imageSize', 'quality'],
+	'grok-imagine': ['quality'],
+	'veo-3.1': ['durationSeconds', 'resolution'],
+	'veo-3.1-lite': ['durationSeconds', 'resolution'],
+	'grok-video': ['aspect_ratio', 'resolution'],   // duration is hard-locked to '6' in buildBody
+	'seedance-2.0': ['resolution'],
+	'seedance-2.0-fast': ['resolution'],
+	'kling-2.6': ['mode'],
+	'kling-3.0': ['mode'],
+	'elevenlabs-tts-v3': ['stability', 'similarity_boost', 'style', 'speed'],
+	'grok-tts': ['language'],
+}
+
+/**
+ * Per-model modes the V1 router schema cannot serve. panel.ts + mcp-tool-registry.ts hide
+ * these from the UI / MCP surface when the active provider is storyverse, so the user
+ * doesn't pick a mode that would then trigger storyverse.ts buildBody's defensive throw
+ * (or silently render unrelated content).
+ *
+ * The throws in buildBody remain as a second line of defense for non-panel callers.
+ */
+export const STORYVERSE_UNSUPPORTED_MODES: Readonly<Record<string, readonly string[]>> = {
+	'grok-imagine': ['image-ref-to-image'],   // router schema is { prompt, aspectRatio } only
+	'grok-video':   ['text-to-video', 'video-extend'],   // router schema requires input_assets.min(1)
+	'veo-3.1':      ['first-frame', 'first-last-frame', 'image-ref'],   // router Veo schema has no input_assets
+	'veo-3.1-lite': ['first-frame'],
+	'seedance-2.0':      ['video-ref'],   // router /v1/uploads accepts only image; no video ref schema
+	'seedance-2.0-fast': ['video-ref'],
+}
+
 /** Throw if more refs are attached than the router schema accepts for this model. */
 function refuseTooManyRefs(modelId: string, refs: string[] | undefined): void {
 	if (!refs || refs.length === 0) return

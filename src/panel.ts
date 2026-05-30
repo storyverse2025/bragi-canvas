@@ -4,6 +4,7 @@ import type { ModelConfig, GenerationType, Mode, ModelParam, VoiceSourceMode } f
 import { getEnabledModels, getActiveProvider } from './models/index'
 import { getTextInputCapability, textInputKindSupported } from './models/text-input-capabilities'
 import { getConfiguredProviderIds } from './providers/registry'
+import { STORYVERSE_NOOP_PARAMS, STORYVERSE_UNSUPPORTED_MODES } from './providers/storyverse'
 import { getUpstreamInputs } from './edge-parser'
 import { getOrderedAudios } from './audio-refs'
 import { getOrderedTextRefs } from './text-refs'
@@ -192,6 +193,22 @@ function supportsVoiceSource(model: ModelConfig, source: VoiceMode, activeProvid
  * Infer the best default mode based on upstream inputs and model's supported modes.
  * Falls through priorities — if the model doesn't support a mode, skip it.
  */
+/** Storyverse routes through a thinner schema than each upstream provider; the panel hides
+ *  modes / params that the V1 router can't serve when the active provider is storyverse. */
+function visibleModesFor(model: ModelConfig | null, activeProvider: string | null): Mode[] {
+	if (!model) return []
+	if (activeProvider !== 'storyverse') return model.modes
+	const unsupported = STORYVERSE_UNSUPPORTED_MODES[model.id] || []
+	return model.modes.filter(m => !unsupported.includes(m))
+}
+
+function visibleParamsFor(model: ModelConfig | null, activeProvider: string | null): ModelParam[] {
+	if (!model) return []
+	if (activeProvider !== 'storyverse') return model.params
+	const noOps = STORYVERSE_NOOP_PARAMS[model.id] || []
+	return model.params.filter(p => !noOps.includes(p.id))
+}
+
 function inferMode(modes: Mode[], imageCount: number, videoCount: number): Mode {
 	// Video upstream → reference or extend
 	if (videoCount > 0 && modes.includes('video-ref')) return 'video-ref'
@@ -500,16 +517,17 @@ export function showGenerateBar(
 		modeSelect.innerHTML = ''
 		if (!selectedModel) { modeSelect.classList.add('bragi-hidden'); selectedMode = null; return }
 
-		if (selectedModel.modes.length <= 1) {
+		const modes = visibleModesFor(selectedModel, providerFor(selectedModel))
+		if (modes.length <= 1) {
 			modeSelect.classList.add('bragi-hidden')
-			selectedMode = selectedModel.modes[0] || null
+			selectedMode = modes[0] || null
 			return
 		}
 
 		modeSelect.classList.remove('bragi-hidden')
-		const inferred = inferMode(selectedModel.modes, upstreamImageCount, upstreamVideoCount)
+		const inferred = inferMode(modes, upstreamImageCount, upstreamVideoCount)
 
-		for (const mode of selectedModel.modes) {
+		for (const mode of modes) {
 			const opt = createEl('option')
 			opt.value = mode
 			opt.textContent = MODE_LABELS[mode] || mode
@@ -525,7 +543,8 @@ export function showGenerateBar(
 		const prev = { ...paramValues }
 		paramValues = {}
 		if (!selectedModel) return
-		for (const p of selectedModel.params) {
+		// Skip no-op params under storyverse so we don't fill defaults that buildBody will drop anyway.
+		for (const p of visibleParamsFor(selectedModel, providerFor(selectedModel))) {
 			// Keep current value if same param exists and value is valid in new model
 			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (p.options?.length || 0) === 0
 			if (prev[p.id] !== undefined && (canKeepDynamicVoice || p.options?.some(o => o.value === String(prev[p.id])))) {
@@ -664,7 +683,7 @@ export function showGenerateBar(
 	function rebuildParams() {
 		paramsEl.innerHTML = ''
 		if (!selectedModel) return
-		for (const param of selectedModel.params) {
+		for (const param of visibleParamsFor(selectedModel, providerFor(selectedModel))) {
 			if (param.type === 'select' && param.options) {
 				// Pick mode-specific options if declared; otherwise the base list.
 				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || param.options || []
@@ -796,19 +815,23 @@ export function showGenerateBar(
 		if (m.type === 'text') return textUpstreamIssue(m) === null
 		// Image models — always compatible for now
 		if (m.type !== 'video') return true
+		// Visible modes account for the storyverse-specific carve-outs (e.g. Veo first-frame is
+		// unreachable via storyverse in V1). Without this, the model picker marks a model as
+		// "compatible with upstream X" when the only matching mode would runtime-throw at submit.
+		const modes = visibleModesFor(m, providerFor(m))
 		// No special inputs — only text-to-video models can run without refs.
-		if (upstreamImageCount === 0 && upstreamVideoCount === 0) return m.modes.includes('text-to-video')
+		if (upstreamImageCount === 0 && upstreamVideoCount === 0) return modes.includes('text-to-video')
 		// Has video input — needs a video-input mode
 		if (upstreamVideoCount > 0) {
-			return m.modes.includes('video-ref') || m.modes.includes('video-extend') || m.modes.includes('video-edit')
+			return modes.includes('video-ref') || modes.includes('video-extend') || modes.includes('video-edit')
 		}
 		// Has 2+ images — needs first-last-frame, multi-image-ref, or image-ref
 		if (upstreamImageCount >= 2) {
-			return m.modes.includes('first-last-frame') || m.modes.includes('multi-image-ref') || m.modes.includes('image-ref')
+			return modes.includes('first-last-frame') || modes.includes('multi-image-ref') || modes.includes('image-ref')
 		}
 		// Has 1 image — needs first-frame or image-ref
 		if (upstreamImageCount === 1) {
-			return m.modes.includes('first-frame') || m.modes.includes('image-ref')
+			return modes.includes('first-frame') || modes.includes('image-ref')
 		}
 		return true
 	}
@@ -1204,19 +1227,20 @@ export function showBatchGenerateBar(
 		modeSelect.innerHTML = ''
 		if (!selectedModel) { modeSelect.classList.add('bragi-hidden'); selectedMode = null; return }
 
-		if (selectedModel.modes.length <= 1) {
+		const modes = visibleModesFor(selectedModel, providerFor(selectedModel))
+		if (modes.length <= 1) {
 			modeSelect.classList.add('bragi-hidden')
-			selectedMode = selectedModel.modes[0] || null
+			selectedMode = modes[0] || null
 			return
 		}
 		modeSelect.classList.remove('bragi-hidden')
-		for (const mode of selectedModel.modes) {
+		for (const mode of modes) {
 			const opt = createEl('option')
 			opt.value = mode
 			opt.textContent = MODE_LABELS[mode] || mode
 			modeSelect.appendChild(opt)
 		}
-		selectedMode = selectedModel.modes[0]
+		selectedMode = modes[0]
 		modeSelect.value = selectedMode
 		resizeMode()
 	}
@@ -1225,7 +1249,7 @@ export function showBatchGenerateBar(
 		const prev = { ...paramValues }
 		paramValues = {}
 		if (!selectedModel) return
-		for (const p of selectedModel.params) {
+		for (const p of visibleParamsFor(selectedModel, providerFor(selectedModel))) {
 			const canKeepDynamicVoice = preserveDynamicVoice && p.id === 'voice' && (p.options?.length || 0) === 0
 			if (prev[p.id] !== undefined && (canKeepDynamicVoice || p.options?.some(o => o.value === String(prev[p.id])))) {
 				paramValues[p.id] = prev[p.id]
@@ -1239,7 +1263,7 @@ export function showBatchGenerateBar(
 	function rebuildParams() {
 		paramsEl.innerHTML = ''
 		if (!selectedModel) return
-		for (const param of selectedModel.params) {
+		for (const param of visibleParamsFor(selectedModel, providerFor(selectedModel))) {
 			if (param.type === 'select' && param.options) {
 				const effectiveOptions = (selectedMode && param.optionsByMode?.[selectedMode]) || param.options || []
 				const currentValue = String(paramValues[param.id] ?? param.default)
