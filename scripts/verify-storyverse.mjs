@@ -233,6 +233,12 @@ assert.match(
 	/onSubmit\(\{ prompt, model: selectedModel,[\s\S]*params:\s*submitParams/,
 	'panel.ts submits stripped params from the single-node panel',
 )
+
+assert.match(
+	panel,
+	/if \(selectedModel && !disabled && !modelSupportsInputs\(selectedModel\)\)[\s\S]*disabled = true/,
+	'updateRunState disables Run when the selected model is incompatible with current upstream (otherwise the user can still hit Run on a (not supported) model that the dropdown grayed out but didn\'t auto-replace)',
+)
 assert.match(
 	panel,
 	/onSubmit\(nodes,\s*\{[\s\S]*params:\s*submitParams/,

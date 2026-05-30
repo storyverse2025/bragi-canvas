@@ -991,6 +991,22 @@ export function showGenerateBar(
 			}
 		}
 
+		// Selected model might have become incompatible with the current upstream after a node
+		// rewire (the dropdown still shows it as "(not supported)" but it stays selected). Don't
+		// let Run fire — the provider would runtime-throw anyway. Image / video paths are the
+		// main cases: e.g. grok-imagine via storyverse has its image-ref-to-image mode hidden,
+		// so attaching an upstream image leaves it with no usable mode.
+		if (selectedModel && !disabled && !modelSupportsInputs(selectedModel)) {
+			disabled = true
+			const activeProvider = providerFor(selectedModel)
+			const reason = selectedModel.type === 'image'
+				? `${selectedModel.name} via ${activeProvider} does not support an upstream image for this generation. Detach the image or pick a different model.`
+				: selectedModel.type === 'video'
+					? `${selectedModel.name} via ${activeProvider} does not support this upstream combination. Detach the inputs or pick a different model.`
+					: `${selectedModel.name} is not compatible with the current upstream.`
+			title = reason
+		}
+
 		runBtn.disabled = disabled
 		runBtn.title = title
 		runBtn.style.opacity = disabled ? '0.4' : '1'
