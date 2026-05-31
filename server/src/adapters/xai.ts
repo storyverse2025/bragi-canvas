@@ -9,9 +9,19 @@
  * Auth: Authorization: Bearer ${XAI_API_KEY}
  * Base: https://api.x.ai/v1
  *
- * Video API shape (verified 2026-05-27):
- *   Submit: POST /v1/videos/generations → { request_id }
+ * Video API shape (cross-referenced against bragi-canvas-plugin/src/providers/xai.ts
+ * which is verified against live xAI 2026-05-07):
+ *   Submit (t2v / first-frame): POST /v1/videos/generations → { request_id }
+ *     - text-to-video:   body = { model, prompt, aspect_ratio, duration, resolution }
+ *     - first-frame i2v: + body.image = { url }
+ *   Submit (video-extend):       POST /v1/videos/extensions  → { request_id }
+ *     - body = { model, prompt, duration, video: { url } }
+ *       (aspect_ratio/resolution follow the source video, ignored upstream)
  *   Poll:   GET  /v1/videos/{request_id} → { status: "pending"|"processing"|"succeeded"|"failed", progress, video_url? }
+ *
+ * Mode selection: empty input_assets → t2v; 1 image-mime asset → first-frame i2v;
+ * 1 video-mime asset → video-extend. We distinguish via the materialized asset's
+ * mimeType (image/* vs video/*).
  */
 
 import type { Adapter, AsyncResult, SyncResult, TaskStatusResult } from './types.js'
@@ -127,18 +137,47 @@ export class XAIAdapter implements Adapter {
   async videoGeneration(
     req: Extract<VideosGenerationsRequest, { model: 'grok-video' }>,
   ): Promise<AsyncResult> {
+    // Base body — forward user params. xAI uses snake_case field names per
+    // bragi-canvas-plugin/src/providers/xai.ts:162-168. duration is forwarded
+    // as a number (the plugin parses it via parseInt before sending).
     const body: Record<string, unknown> = {
       model: 'grok-imagine-video',
       prompt: req.prompt,
-      resolution: '720p',
+    }
+    if (req.duration !== undefined) body.duration = parseInt(req.duration, 10)
+    if (req.aspect_ratio !== undefined) body.aspect_ratio = req.aspect_ratio
+    if (req.resolution !== undefined) body.resolution = req.resolution
+
+    // Materialize assets (cap is 1 by schema, but use Promise.all to mirror the
+    // Veo adapter's pattern from Task 1.1 for consistency).
+    const assets = req.input_assets ?? []
+    const materialized = await Promise.all(
+      assets.map((ref) => materializeAsset(ref, 'url'))
+    )
+
+    // Mode selection by asset count + mimeType:
+    //   0 assets             → text-to-video       (POST /videos/generations)
+    //   1 image/* asset      → first-frame i2v     (POST /videos/generations, body.image)
+    //   1 video/* asset      → video-extend        (POST /videos/extensions,  body.video)
+    let path = '/videos/generations'
+    if (materialized.length === 1) {
+      const [asset] = materialized
+      // xAI rejects bare-string URLs with `invalid type: string, expected struct ImageUrl`;
+      // both image and video fields must be the { url } struct shape
+      // (plugin xai.ts:18-21, :177, :184).
+      if (asset.mimeType.startsWith('video/')) {
+        path = '/videos/extensions'
+        body.video = { url: asset.url }
+      } else {
+        // Treat anything non-video as image (image/*, or application/octet-stream
+        // for fetched http URLs whose Content-Type wasn't an image MIME — we
+        // default to first-frame i2v rather than video-extend, since image refs
+        // are the dominant case and the upstream will reject mismatched bytes).
+        body.image = { url: asset.url }
+      }
     }
 
-    if (req.input_assets && req.input_assets.length > 0) {
-      const m = await materializeAsset(req.input_assets[0], 'url')
-      body.image_url = m.url
-    }
-
-    const r: any = await this.callJson('POST', '/videos/generations', body)
+    const r: any = await this.callJson('POST', path, body)
 
     const requestId: string = r.request_id
     if (!requestId) {

@@ -99,7 +99,7 @@ describe('XAIAdapter', () => {
       model: 'grok-video',
       prompt: 'a cat running in the park',
       input_assets: ['ast_img1'],
-      duration: '6',
+      duration: '5',
     })
 
     expect(result.status).toBe('queued')
@@ -147,8 +147,110 @@ describe('XAIAdapter', () => {
         model: 'grok-video',
         prompt: 'test',
         input_assets: ['ast_img1'],
-        duration: '6',
+        duration: '5',
       })
     ).rejects.toMatchObject({ code: 'provider_unavailable' })
+  })
+
+  // ---------------------------------------------------------------------------
+  // grok-video: t2v / first-frame / video-extend branching + param forwarding
+  // ---------------------------------------------------------------------------
+
+  it('videoGeneration grok-video text-to-video sends no image/video field', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'a sunset over the ocean',
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.model).toBe('grok-imagine-video')
+    expect(capturedBody.prompt).toBe('a sunset over the ocean')
+    expect(capturedBody.image).toBeUndefined()
+    expect(capturedBody.video).toBeUndefined()
+    expect(capturedBody.image_url).toBeUndefined()
+    expect(capturedBody.video_url).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video first-frame i2v sends image: { url } (image asset)', async () => {
+    // ast_img1 is stored as image/png in beforeEach
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'animate from this frame',
+      input_assets: ['ast_img1'],
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.image).toBeDefined()
+    expect(capturedBody.image.url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1/)
+    expect(capturedBody.video).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video video-extend sends video: { url } and hits /videos/extensions (video asset)', async () => {
+    // Store a video-mime asset to trigger the video-extend branch
+    const dir = process.env.ASSET_TMP_DIR!
+    await storeAsset(dir, 'ast_vid1', Buffer.from('VIDEODATA'), 'video/mp4')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/extensions', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'continue this video',
+      input_assets: ['ast_vid1'],
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.video).toBeDefined()
+    expect(capturedBody.video.url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_vid1/)
+    expect(capturedBody.image).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video forwards duration / aspect_ratio / resolution as snake_case', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'a sunset',
+      duration: '10',
+      aspect_ratio: '9:16',
+      resolution: '1080p',
+    })
+
+    // xAI takes duration as a number (plugin parseInt's it before sending);
+    // aspect_ratio + resolution are snake_case strings.
+    expect(capturedBody.duration).toBe(10)
+    expect(capturedBody.aspect_ratio).toBe('9:16')
+    expect(capturedBody.resolution).toBe('1080p')
   })
 })

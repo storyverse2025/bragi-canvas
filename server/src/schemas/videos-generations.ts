@@ -16,11 +16,17 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     ratio: z.enum(['9:16', '16:9', '1:1']),
     generate_audio: z.boolean().default(true),
   }),
+  // grok-video: text-to-video (0 assets), first-frame i2v (1 image asset),
+  // or video-extend (1 video asset). Mode is inferred from the asset's
+  // mimeType in the adapter. Enum values mirror plugin's
+  // bragi-canvas-plugin/src/models/grok.ts:57-101 (duration/aspect_ratio/resolution).
   z.object({
     model: z.literal('grok-video'),
     prompt: z.string().min(1),
-    input_assets: z.array(z.string()).min(1).max(1),
-    duration: z.enum(['6']),
+    input_assets: z.array(z.string()).max(1).optional(),
+    duration: z.enum(['5', '10', '15']).optional(),
+    aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3']).optional(),
+    resolution: z.enum(['480p', '720p', '1080p']).optional(),
   }),
   // veo-3.1: text-to-video, first-frame (1 asset), first-last-frame (2 assets),
   // image-ref (1-3 assets). Modes are inferred from input_assets count by the adapter.

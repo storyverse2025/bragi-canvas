@@ -20,17 +20,74 @@ describe('VideosGenerationsBody', () => {
       model: 'no-such-video', prompt: 'x',
     })).toThrow()
   })
-  it('grok-video requires input_assets (i2v only)', () => {
-    expect(() => VideosGenerationsBody.parse({
-      model: 'grok-video', prompt: 'a cat walks', duration: '6',
-    })).toThrow()
-  })
-  it('grok-video parses when input_assets provided', () => {
+  // ---------------------------------------------------------------------------
+  // grok-video — t2v / first-frame / video-extend (mode inferred by adapter from
+  // input_asset mimeType) + duration / aspect_ratio / resolution params.
+  // ---------------------------------------------------------------------------
+
+  it('grok-video parses text-to-video (no input_assets)', () => {
     const r = VideosGenerationsBody.parse({
-      model: 'grok-video', prompt: 'a cat walks', duration: '6', input_assets: ['asset_abc123'],
+      model: 'grok-video', prompt: 'a cat walks',
     })
     expect(r.model).toBe('grok-video')
-    expect(r.input_assets).toEqual(['asset_abc123'])
+    expect((r as any).input_assets).toBeUndefined()
+    expect((r as any).duration).toBeUndefined()
+    expect((r as any).aspect_ratio).toBeUndefined()
+    expect((r as any).resolution).toBeUndefined()
+  })
+
+  it('grok-video parses with input_assets (first-frame or video-extend)', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'grok-video', prompt: 'a cat walks', input_assets: ['asset_abc123'],
+    })
+    expect(r.model).toBe('grok-video')
+    expect((r as any).input_assets).toEqual(['asset_abc123'])
+  })
+
+  it('grok-video parses with duration / aspect_ratio / resolution', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'grok-video',
+      prompt: 'x',
+      duration: '10',
+      aspect_ratio: '9:16',
+      resolution: '1080p',
+    })
+    expect((r as any).duration).toBe('10')
+    expect((r as any).aspect_ratio).toBe('9:16')
+    expect((r as any).resolution).toBe('1080p')
+  })
+
+  it('grok-video accepts all plugin duration values (5/10/15)', () => {
+    for (const d of ['5', '10', '15'] as const) {
+      const r = VideosGenerationsBody.parse({
+        model: 'grok-video', prompt: 'x', duration: d,
+      })
+      expect((r as any).duration).toBe(d)
+    }
+  })
+
+  it('grok-video rejects more than 1 input_asset', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'grok-video', prompt: 'x', input_assets: ['a', 'b'],
+    })).toThrow()
+  })
+
+  it('grok-video rejects out-of-enum duration', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'grok-video', prompt: 'x', duration: '6',
+    })).toThrow()
+  })
+
+  it('grok-video rejects out-of-enum aspect_ratio', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'grok-video', prompt: 'x', aspect_ratio: '21:9',
+    })).toThrow()
+  })
+
+  it('grok-video rejects out-of-enum resolution', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'grok-video', prompt: 'x', resolution: '4k',
+    })).toThrow()
   })
 
   // ---------------------------------------------------------------------------
