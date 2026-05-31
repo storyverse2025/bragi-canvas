@@ -20,6 +20,14 @@
  *      (same as Gemini 2.5 Flash Image preview response). Confirmed from docs.
  *   4. Veo operation name is used directly as provider_task_id; polling uses
  *      GET /v1beta/{operation.name} which may include the full path segment.
+ *   5. Veo image-conditioning shapes (input_assets):
+ *      - First input_asset → `instances[0].image: { bytesBase64Encoded, mimeType }`
+ *        (well-documented for first-frame i2v).
+ *      - Additional input_assets → `instances[0].referenceImages: [{ image: {...} }]`
+ *        (Veo 3.1 reference-images / style-ref / character-ref shape; less stable in
+ *        public docs — flagged as ASSUMPTION in videoGeneration body).
+ *      - Veo LRO does NOT fetch external URLs the way fal does, so all input_assets
+ *        are materialized via `inline-base64` and forwarded as bytesBase64Encoded.
  */
 
 import type { Adapter, SyncResult, AsyncResult, TaskStatusResult } from './types.js'
@@ -28,6 +36,7 @@ import type { ChatCompletionsRequest } from '../schemas/chat-completions.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 import type { VideosGenerationsRequest } from '../schemas/videos-generations.js'
 import { newAssetId, signAssetUrl, storeAsset } from '../assets.js'
+import { materializeAsset } from './materialize-asset.js'
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
@@ -231,12 +240,44 @@ export class GeminiAdapter implements Adapter {
   ): Promise<AsyncResult> {
     // ASSUMPTION: Veo uses predictLongRunning suffix (per docs).
     // The operation name returned is used as provider_task_id for polling.
-    const body = {
-      instances: [{ prompt: req.prompt }],
-      parameters: {
-        aspectRatio: req.aspectRatio,
-      },
+
+    // Build instances[0]: prompt + optional image (first asset) + optional
+    // referenceImages (additional assets). Veo LRO accepts inline bytes only —
+    // it does NOT fetch external URLs the way fal does — so we materialize each
+    // input_asset to inline-base64.
+    const instance: Record<string, unknown> = { prompt: req.prompt }
+
+    const assets = req.input_assets ?? []
+    if (assets.length > 0) {
+      const first = await materializeAsset(assets[0], 'inline-base64')
+      instance.image = {
+        bytesBase64Encoded: first.base64,
+        mimeType: first.mimeType,
+      }
+
+      if (assets.length > 1) {
+        // ASSUMPTION: Veo 3.1 reference-images shape is
+        //   instances[0].referenceImages: [{ image: { bytesBase64Encoded, mimeType } }, ...]
+        // The public docs are less explicit about this field than about the
+        // first-frame `image` field. If the wire-level shape differs (e.g.
+        // `reference_images` snake_case, or a flat array of images), update
+        // here. Live smoke (Task 31) will surface any rejection.
+        const refs = []
+        for (let i = 1; i < assets.length; i++) {
+          const m = await materializeAsset(assets[i], 'inline-base64')
+          refs.push({
+            image: { bytesBase64Encoded: m.base64, mimeType: m.mimeType },
+          })
+        }
+        instance.referenceImages = refs
+      }
     }
+
+    const parameters: Record<string, unknown> = { aspectRatio: req.aspectRatio }
+    if (req.durationSeconds !== undefined) parameters.durationSeconds = req.durationSeconds
+    if (req.resolution !== undefined) parameters.resolution = req.resolution
+
+    const body = { instances: [instance], parameters }
 
     const r: any = await this.call(`/models/${toUpstream(req.model)}:predictLongRunning`, body)
 
