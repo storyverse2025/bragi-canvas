@@ -80,6 +80,15 @@ describe('VideosGenerationsBody', () => {
     })).toThrow()
   })
 
+  it('veo-3.1 rejects empty input_assets array', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'veo-3.1',
+      prompt: 'a sunset',
+      aspectRatio: '16:9',
+      input_assets: [],
+    })).toThrow()
+  })
+
   it('veo-3.1 rejects durationSeconds below min (2)', () => {
     expect(() => VideosGenerationsBody.parse({
       model: 'veo-3.1',
@@ -136,6 +145,15 @@ describe('VideosGenerationsBody', () => {
       prompt: 'a sunset',
       aspectRatio: '16:9',
       input_assets: ['ast_a', 'ast_b'],
+    })).toThrow()
+  })
+
+  it('veo-3.1-lite rejects empty input_assets array', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'veo-3.1-lite',
+      prompt: 'a sunset',
+      aspectRatio: '16:9',
+      input_assets: [],
     })).toThrow()
   })
 

@@ -249,27 +249,26 @@ export class GeminiAdapter implements Adapter {
 
     const assets = req.input_assets ?? []
     if (assets.length > 0) {
-      const first = await materializeAsset(assets[0], 'inline-base64')
+      // Materialize all assets in parallel (matches byteplus.ts:153-158 pattern).
+      const materialized = await Promise.all(
+        assets.map((ref) => materializeAsset(ref, 'inline-base64'))
+      )
+      const [first, ...rest] = materialized
       instance.image = {
         bytesBase64Encoded: first.base64,
         mimeType: first.mimeType,
       }
 
-      if (assets.length > 1) {
+      if (rest.length > 0) {
         // ASSUMPTION: Veo 3.1 reference-images shape is
         //   instances[0].referenceImages: [{ image: { bytesBase64Encoded, mimeType } }, ...]
         // The public docs are less explicit about this field than about the
         // first-frame `image` field. If the wire-level shape differs (e.g.
         // `reference_images` snake_case, or a flat array of images), update
         // here. Live smoke (Task 31) will surface any rejection.
-        const refs = []
-        for (let i = 1; i < assets.length; i++) {
-          const m = await materializeAsset(assets[i], 'inline-base64')
-          refs.push({
-            image: { bytesBase64Encoded: m.base64, mimeType: m.mimeType },
-          })
-        }
-        instance.referenceImages = refs
+        instance.referenceImages = rest.map((m) => ({
+          image: { bytesBase64Encoded: m.base64, mimeType: m.mimeType },
+        }))
       }
     }
 
