@@ -187,11 +187,24 @@ export class ByteplusAdapter implements Adapter {
 
     if (req.input_assets && req.input_assets.length > 0) {
       const m = await materializeAsset(req.input_assets[0], 'url')
-      content.push({
-        type: 'image_url',
-        image_url: { url: m.url },
-        role: 'reference_image',
-      })
+      // Mode is inferred from MIME: video/* → video-ref (v2v), everything else
+      // → image-ref (i2v). Raw http(s) URLs materialize as application/octet-stream
+      // (materialize-asset.ts:30) and so default to image — matching the xai
+      // adapter's documented fallthrough (xai.ts:172-176). Do NOT invert this to
+      // default unknown MIME to video, or URL-form i2v inputs break.
+      if (m.mimeType.startsWith('video/')) {
+        content.push({
+          type: 'video_url',
+          video_url: { url: m.url },
+          role: 'reference_video',
+        })
+      } else {
+        content.push({
+          type: 'image_url',
+          image_url: { url: m.url },
+          role: 'reference_image',
+        })
+      }
     }
 
     const body: Record<string, unknown> = {
@@ -201,6 +214,8 @@ export class ByteplusAdapter implements Adapter {
       duration: req.duration ? Number(req.duration) : -1,
       generate_audio: req.generate_audio ?? true,
     }
+
+    if (req.resolution) body.resolution = req.resolution
 
     const r: any = await this.call('POST', '/contents/generations/tasks', body)
 

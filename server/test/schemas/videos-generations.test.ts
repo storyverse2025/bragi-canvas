@@ -12,8 +12,47 @@ describe('VideosGenerationsBody', () => {
     const r = VideosGenerationsBody.parse({
       model: 'seedance-2.0', prompt: 'x', ratio: '16:9',
     })
-    // resolution was removed from schema (Volcengine Ark does not accept it)
+    // resolution is always sent to Volcengine Ark (default '720p').
+    // The old comment "resolution was removed from schema (Volcengine Ark does
+    // not accept it)" was stale/wrong — the plugin has always forwarded it.
     expect(r.generate_audio).toBe(true)
+    expect((r as any).resolution).toBe('720p')
+  })
+
+  it('seedance-2.0 parses each of 480p/720p/1080p', () => {
+    for (const res of ['480p', '720p', '1080p'] as const) {
+      const r = VideosGenerationsBody.parse({
+        model: 'seedance-2.0', prompt: 'x', ratio: '16:9', resolution: res,
+      })
+      expect((r as any).resolution).toBe(res)
+    }
+  })
+
+  it('seedance-2.0 defaults resolution to 720p when omitted', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'seedance-2.0', prompt: 'x', ratio: '16:9',
+    })
+    expect((r as any).resolution).toBe('720p')
+  })
+
+  it('seedance-2.0-fast rejects 1080p (not in its resolution enum)', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'seedance-2.0-fast', prompt: 'x', ratio: '16:9', resolution: '1080p',
+    })).toThrow()
+  })
+
+  it('seedance-2.0-fast defaults resolution to 720p when omitted', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'seedance-2.0-fast', prompt: 'x', ratio: '16:9',
+    })
+    expect((r as any).resolution).toBe('720p')
+  })
+
+  it('seedance-2.0 accepts a video input_asset (schema-level v2v)', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'seedance-2.0', prompt: 'x', ratio: '16:9', input_assets: ['ast_vid1'],
+    })
+    expect((r as any).input_assets).toEqual(['ast_vid1'])
   })
   it('rejects unknown video model', () => {
     expect(() => VideosGenerationsBody.parse({

@@ -8,13 +8,30 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     duration: z.enum(['5', '10']).default('5'),
     aspectRatio: z.enum(['9:16', '16:9', '1:1']),
   }),
+  // seedance-2.0 / seedance-2.0-fast: text-to-video (0 assets), image-ref i2v
+  // (1 image asset), or video-ref v2v (1 video asset). Mode is inferred from
+  // the materialised asset's mimeType in the adapter. Resolution enums differ
+  // per model (seedance-2.0 supports 1080p; seedance-2.0-fast does not).
+  // resolution is always sent (default '720p') to match plugin behaviour —
+  // bragi-canvas-plugin/src/providers/seedance.ts always forwards resolution.
+  // Split into two branches for plugin parity.
   z.object({
-    model: z.enum(['seedance-2.0', 'seedance-2.0-fast']),
+    model: z.literal('seedance-2.0'),
     prompt: z.string().min(1),
     input_assets: z.array(z.string()).max(1).optional(),
     duration: z.enum(['-1', '5', '10']).default('-1'),
     ratio: z.enum(['9:16', '16:9', '1:1']),
     generate_audio: z.boolean().default(true),
+    resolution: z.enum(['480p', '720p', '1080p']).default('720p'),
+  }),
+  z.object({
+    model: z.literal('seedance-2.0-fast'),
+    prompt: z.string().min(1),
+    input_assets: z.array(z.string()).max(1).optional(),
+    duration: z.enum(['-1', '5', '10']).default('-1'),
+    ratio: z.enum(['9:16', '16:9', '1:1']),
+    generate_audio: z.boolean().default(true),
+    resolution: z.enum(['480p', '720p']).default('720p'),
   }),
   // grok-video: text-to-video (0 assets), first-frame i2v (1 image asset),
   // or video-extend (1 video asset). Mode is inferred from the asset's
