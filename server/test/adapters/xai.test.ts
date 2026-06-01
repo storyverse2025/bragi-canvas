@@ -229,6 +229,39 @@ describe('XAIAdapter', () => {
     expect(capturedBody.image).toBeUndefined()
   })
 
+  it('videoGeneration grok-video: raw http(s) URL asset routes to first-frame i2v (octet-stream falls through to image)', async () => {
+    // Documents current behaviour (xai.ts:168-177): materializeAsset(url,'url')
+    // returns application/octet-stream WITHOUT fetching (materialize-asset.ts:30),
+    // so a raw/signed *video* URL cannot reach the video-extend branch and is
+    // sent as a first-frame image instead. Resolving real MIME for URL-form
+    // assets is Task 1.4's scope (router-issued signed URLs); this test pins the
+    // present behaviour so the change there is deliberate, not silent.
+    let capturedBody: any
+    let capturedPath = ''
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(function () {
+        capturedPath = this.req.path
+        return [200, videoSubmitFx]
+      })
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'extend this clip',
+      input_assets: ['https://cdn.example.com/clip.mp4'],
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedPath).toContain('/v1/videos/generations') // NOT /videos/extensions
+    expect(capturedBody.image).toBeDefined()
+    expect(capturedBody.image.url).toBe('https://cdn.example.com/clip.mp4')
+    expect(capturedBody.video).toBeUndefined()
+  })
+
   it('videoGeneration grok-video forwards duration / aspect_ratio / resolution as snake_case', async () => {
     let capturedBody: any
     nock(BASE)

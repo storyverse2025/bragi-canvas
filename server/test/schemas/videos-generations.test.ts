@@ -25,15 +25,26 @@ describe('VideosGenerationsBody', () => {
   // input_asset mimeType) + duration / aspect_ratio / resolution params.
   // ---------------------------------------------------------------------------
 
-  it('grok-video parses text-to-video (no input_assets)', () => {
+  it('grok-video parses text-to-video (no input_assets) and applies plugin defaults', () => {
     const r = VideosGenerationsBody.parse({
       model: 'grok-video', prompt: 'a cat walks',
     })
     expect(r.model).toBe('grok-video')
     expect((r as any).input_assets).toBeUndefined()
-    expect((r as any).duration).toBeUndefined()
-    expect((r as any).aspect_ratio).toBeUndefined()
-    expect((r as any).resolution).toBeUndefined()
+    // Defaults mirror plugin grok.ts (duration 5 / aspect_ratio 16:9 / resolution 720p)
+    // so a paramless router request forwards the same fields the plugin always sends.
+    expect((r as any).duration).toBe('5')
+    expect((r as any).aspect_ratio).toBe('16:9')
+    expect((r as any).resolution).toBe('720p')
+  })
+
+  it('grok-video accepts empty input_assets array (text-to-video, unlike veo)', () => {
+    // Intentional divergence from veo: grok-video supports 0-asset t2v, so the
+    // schema permits [] (adapter treats length 0 as text-to-video).
+    const r = VideosGenerationsBody.parse({
+      model: 'grok-video', prompt: 'a cat walks', input_assets: [],
+    })
+    expect((r as any).input_assets).toEqual([])
   })
 
   it('grok-video parses with input_assets (first-frame or video-extend)', () => {
