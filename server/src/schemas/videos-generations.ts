@@ -19,8 +19,11 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     model: z.literal('seedance-2.0'),
     prompt: z.string().min(1),
     input_assets: z.array(z.string()).max(1).optional(),
-    duration: z.enum(['-1', '5', '10']).default('-1'),
-    ratio: z.enum(['9:16', '16:9', '1:1']),
+    // duration / ratio mirror plugin src/models/seedance.ts:14-48 — '-1' is "auto",
+    // otherwise 4–15s; default '5' (plugin default). seedance-2.0 also supports
+    // 4:3 / 3:4 (the -fast variant does not).
+    duration: z.enum(['-1', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15']).default('5'),
+    ratio: z.enum(['9:16', '16:9', '1:1', '4:3', '3:4']),
     generate_audio: z.boolean().default(true),
     resolution: z.enum(['480p', '720p', '1080p']).default('720p'),
   }),
@@ -28,7 +31,9 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     model: z.literal('seedance-2.0-fast'),
     prompt: z.string().min(1),
     input_assets: z.array(z.string()).max(1).optional(),
-    duration: z.enum(['-1', '5', '10']).default('-1'),
+    // Mirrors plugin src/models/seedance.ts:83-124 — same duration range, but
+    // -fast supports only 3 ratios and no 1080p.
+    duration: z.enum(['-1', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15']).default('5'),
     ratio: z.enum(['9:16', '16:9', '1:1']),
     generate_audio: z.boolean().default(true),
     resolution: z.enum(['480p', '720p']).default('720p'),

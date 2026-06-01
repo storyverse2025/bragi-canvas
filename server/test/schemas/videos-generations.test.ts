@@ -54,6 +54,29 @@ describe('VideosGenerationsBody', () => {
     })
     expect((r as any).input_assets).toEqual(['ast_vid1'])
   })
+
+  it('seedance duration matches plugin range: -1 (auto) and 4..15 accepted, default 5', () => {
+    for (const d of ['-1', '4', '7', '11', '15'] as const) {
+      const r = VideosGenerationsBody.parse({ model: 'seedance-2.0', prompt: 'x', ratio: '16:9', duration: d })
+      expect((r as any).duration).toBe(d)
+    }
+    const def = VideosGenerationsBody.parse({ model: 'seedance-2.0', prompt: 'x', ratio: '16:9' })
+    expect((def as any).duration).toBe('5')
+  })
+
+  it('seedance rejects out-of-range duration (3 and 16)', () => {
+    for (const d of ['3', '16'] as const) {
+      expect(() => VideosGenerationsBody.parse({ model: 'seedance-2.0', prompt: 'x', ratio: '16:9', duration: d })).toThrow()
+    }
+  })
+
+  it('seedance-2.0 accepts 4:3 / 3:4 ratios; seedance-2.0-fast rejects them', () => {
+    for (const ratio of ['4:3', '3:4'] as const) {
+      const r = VideosGenerationsBody.parse({ model: 'seedance-2.0', prompt: 'x', ratio })
+      expect((r as any).ratio).toBe(ratio)
+      expect(() => VideosGenerationsBody.parse({ model: 'seedance-2.0-fast', prompt: 'x', ratio })).toThrow()
+    }
+  })
   it('rejects unknown video model', () => {
     expect(() => VideosGenerationsBody.parse({
       model: 'no-such-video', prompt: 'x',

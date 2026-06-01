@@ -121,7 +121,9 @@ describe('XAIAdapter', () => {
     expect(result.poll_after_ms).toBeGreaterThan(0)
   })
 
-  it('taskStatus for succeeded xai video returns outputs with video url', async () => {
+  it("taskStatus maps xAI status 'done' (real success value) to succeeded with nested video.url", async () => {
+    // Real xAI returns {status:'done', video:{url}} — NOT 'succeeded'/'completed'.
+    // Fixture mirrors that so this test guards the done→succeeded mapping.
     const taskId = 'e1719105-a601-9742-84c7-test12345678'
     nock(BASE)
       .get(`/v1/videos/${taskId}`)
@@ -134,6 +136,18 @@ describe('XAIAdapter', () => {
     expect(result.outputs).toHaveLength(1)
     expect(result.outputs![0].kind).toBe('video')
     expect(result.outputs![0].url).toContain('xai-video-result-abc123.mp4')
+  })
+
+  it("taskStatus maps xAI status 'expired' to failed (was silently stuck on running)", async () => {
+    const taskId = 'e1719105-a601-9742-84c7-testexpired1'
+    nock(BASE)
+      .get(`/v1/videos/${taskId}`)
+      .reply(200, { status: 'expired', error: { message: 'task expired' } })
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.taskStatus!(taskId)
+
+    expect(result.status).toBe('failed')
   })
 
   it('videoGeneration missing request_id in response throws provider_unavailable', async () => {

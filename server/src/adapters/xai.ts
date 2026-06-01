@@ -198,7 +198,10 @@ export class XAIAdapter implements Adapter {
     const r: any = await this.callJson('GET', `/videos/${taskId}`)
     const status: string = (r.status ?? '').toLowerCase()
 
-    if (status === 'succeeded' || status === 'completed') {
+    // xAI returns status 'done' on success (plugin src/providers/xai.ts:228 +
+    // the /v1/videos/{id} "200 done" contract). Accept succeeded/completed
+    // defensively in case the API ever changes.
+    if (status === 'done' || status === 'succeeded' || status === 'completed') {
       const videoUrl: string = r.video_url ?? r.video?.url
       if (!videoUrl) {
         return {
@@ -214,8 +217,9 @@ export class XAIAdapter implements Adapter {
       }
     }
 
-    if (status === 'failed') {
-      const msg = r.error ?? r.message ?? 'xAI video generation failed'
+    // xAI marks unrecoverable tasks 'failed' or 'expired' (plugin xai.ts:225).
+    if (status === 'failed' || status === 'expired') {
+      const msg = r.error ?? r.message ?? `xAI video generation ${status}`
       return {
         status: 'failed',
         error: {

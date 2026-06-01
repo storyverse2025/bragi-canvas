@@ -1,5 +1,7 @@
 {
-  "status": "succeeded",
+  "status": "done",
   "progress": 100,
-  "video_url": "https://cdn.x.ai/videos/xai-video-result-abc123.mp4"
+  "video": {
+    "url": "https://cdn.x.ai/videos/xai-video-result-abc123.mp4"
+  }
 }
