@@ -139,9 +139,31 @@ describe('VideosGenerationsBody', () => {
     }
   })
 
-  it('grok-video rejects more than 1 input_asset', () => {
+  it('grok-video accepts up to 3 input_assets (image-ref)', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'grok-video', prompt: 'x', input_assets: ['a', 'b', 'c'],
+    })
+    expect((r as any).input_assets).toHaveLength(3)
+  })
+
+  it('grok-video rejects more than 3 input_assets', () => {
     expect(() => VideosGenerationsBody.parse({
-      model: 'grok-video', prompt: 'x', input_assets: ['a', 'b'],
+      model: 'grok-video', prompt: 'x', input_assets: ['a', 'b', 'c', 'd'],
+    })).toThrow()
+  })
+
+  it('grok-video accepts each mode enum value', () => {
+    for (const mode of ['text-to-video', 'first-frame', 'image-ref', 'video-extend'] as const) {
+      const r = VideosGenerationsBody.parse({
+        model: 'grok-video', prompt: 'x', mode,
+      })
+      expect((r as any).mode).toBe(mode)
+    }
+  })
+
+  it('grok-video rejects invalid mode', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'grok-video', prompt: 'x', mode: 'first-last-frame',
     })).toThrow()
   })
 
@@ -292,5 +314,49 @@ describe('VideosGenerationsBody', () => {
       model: 'veo-3.1-lite', prompt: 'x', aspectRatio: '16:9',
     })
     expect(r.model).toBe('veo-3.1-lite')
+  })
+
+  // ---------------------------------------------------------------------------
+  // veo-3.1 mode field
+  // ---------------------------------------------------------------------------
+
+  it('veo-3.1 accepts each mode enum value', () => {
+    for (const mode of ['text-to-video', 'first-frame', 'first-last-frame', 'image-ref'] as const) {
+      const r = VideosGenerationsBody.parse({
+        model: 'veo-3.1', prompt: 'x', aspectRatio: '16:9', mode,
+      })
+      expect((r as any).mode).toBe(mode)
+    }
+  })
+
+  it('veo-3.1 rejects invalid mode', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'veo-3.1', prompt: 'x', aspectRatio: '16:9', mode: 'video-extend',
+    })).toThrow()
+  })
+
+  // ---------------------------------------------------------------------------
+  // veo-3.1-lite mode field — only text-to-video and first-frame supported
+  // ---------------------------------------------------------------------------
+
+  it('veo-3.1-lite accepts text-to-video and first-frame modes', () => {
+    for (const mode of ['text-to-video', 'first-frame'] as const) {
+      const r = VideosGenerationsBody.parse({
+        model: 'veo-3.1-lite', prompt: 'x', aspectRatio: '16:9', mode,
+      })
+      expect((r as any).mode).toBe(mode)
+    }
+  })
+
+  it('veo-3.1-lite rejects image-ref mode (not in lite enum)', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'veo-3.1-lite', prompt: 'x', aspectRatio: '16:9', mode: 'image-ref',
+    })).toThrow()
+  })
+
+  it('veo-3.1-lite rejects first-last-frame mode (not in lite enum)', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'veo-3.1-lite', prompt: 'x', aspectRatio: '16:9', mode: 'first-last-frame',
+    })).toThrow()
   })
 })

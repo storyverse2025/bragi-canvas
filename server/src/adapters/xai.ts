@@ -140,42 +140,84 @@ export class XAIAdapter implements Adapter {
     // Base body — forward user params. xAI uses snake_case field names per
     // bragi-canvas-plugin/src/providers/xai.ts:162-168. duration is forwarded
     // as a number (the plugin parses it via parseInt before sending).
-    const body: Record<string, unknown> = {
-      model: 'grok-imagine-video',
-      prompt: req.prompt,
-    }
-    if (req.duration !== undefined) body.duration = parseInt(req.duration, 10)
-    if (req.aspect_ratio !== undefined) body.aspect_ratio = req.aspect_ratio
-    if (req.resolution !== undefined) body.resolution = req.resolution
-
-    // Materialize assets (cap is 1 by schema, but use Promise.all to mirror the
-    // Veo adapter's pattern from Task 1.1 for consistency).
     const assets = req.input_assets ?? []
     const materialized = await Promise.all(
       assets.map((ref) => materializeAsset(ref, 'url'))
     )
 
-    // Mode selection by asset count + mimeType:
-    //   0 assets             → text-to-video       (POST /videos/generations)
-    //   1 image/* asset      → first-frame i2v     (POST /videos/generations, body.image)
-    //   1 video/* asset      → video-extend        (POST /videos/extensions,  body.video)
-    let path = '/videos/generations'
-    if (materialized.length === 1) {
+    // Compute effective mode: explicit req.mode takes priority; otherwise infer
+    // from asset count + mimeType (back-compat with callers that omit mode):
+    //   0 assets                          → text-to-video
+    //   1 video/* asset                   → video-extend
+    //   1 non-video asset (image/*, or
+    //     application/octet-stream for
+    //     raw http URLs — falls through
+    //     to first-frame; see comment
+    //     in test for details)            → first-frame
+    //   ≥2 assets                         → image-ref
+    // Mirrors plugin xai.ts:155-189 mode derivation.
+    let effectiveMode: string
+    if (req.mode) {
+      effectiveMode = req.mode
+    } else if (materialized.length === 0) {
+      effectiveMode = 'text-to-video'
+    } else if (materialized.length === 1) {
       const [asset] = materialized
-      // xAI rejects bare-string URLs with `invalid type: string, expected struct ImageUrl`;
-      // both image and video fields must be the { url } struct shape
-      // (plugin xai.ts:18-21, :177, :184).
       if (asset.mimeType.startsWith('video/')) {
-        path = '/videos/extensions'
-        body.video = { url: asset.url }
+        effectiveMode = 'video-extend'
       } else {
         // Treat anything non-video as image (image/*, or application/octet-stream
         // for fetched http URLs whose Content-Type wasn't an image MIME — we
         // default to first-frame i2v rather than video-extend, since image refs
         // are the dominant case and the upstream will reject mismatched bytes).
-        body.image = { url: asset.url }
+        effectiveMode = 'first-frame'
       }
+    } else {
+      effectiveMode = 'image-ref'
     }
+
+    const body: Record<string, unknown> = {
+      model: 'grok-imagine-video',
+      prompt: req.prompt,
+    }
+
+    // Per-mode duration caps (verified against live API, 2026-05-07):
+    //   text-to-video / first-frame / video-extend: 1–15s
+    //   image-ref:                                  1–10s (plugin xai.ts:160)
+    let parsedDuration = req.duration !== undefined ? parseInt(req.duration, 10) : undefined
+    if (effectiveMode === 'image-ref' && parsedDuration !== undefined && parsedDuration > 10) {
+      parsedDuration = 10
+    }
+
+    if (parsedDuration !== undefined) body.duration = parsedDuration
+    if (req.aspect_ratio !== undefined) body.aspect_ratio = req.aspect_ratio
+    if (req.resolution !== undefined) body.resolution = req.resolution
+
+    // Mode-specific asset fields and endpoint selection.
+    // xAI rejects bare-string URLs with `invalid type: string, expected struct ImageUrl`;
+    // both image and video fields must be the { url } struct shape
+    // (plugin xai.ts:18-21, :177, :184, :187-188).
+    let path = '/videos/generations'
+
+    if (effectiveMode === 'video-extend') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'grok-video video-extend requires at least 1 input_asset', 400)
+      }
+      path = '/videos/extensions'
+      body.video = { url: materialized[0].url }
+    } else if (effectiveMode === 'first-frame') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'grok-video first-frame requires at least 1 input_asset', 400)
+      }
+      body.image = { url: materialized[0].url }
+    } else if (effectiveMode === 'image-ref') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'grok-video image-ref requires at least 1 input_asset', 400)
+      }
+      // Up to 3 reference images — mirrors plugin xai.ts:185-188.
+      body.reference_images = materialized.slice(0, 3).map((a) => ({ url: a.url }))
+    }
+    // text-to-video: no asset fields needed.
 
     const r: any = await this.callJson('POST', path, body)
 

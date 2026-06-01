@@ -276,6 +276,105 @@ describe('XAIAdapter', () => {
     expect(capturedBody.video).toBeUndefined()
   })
 
+  // ---------------------------------------------------------------------------
+  // grok-video: image-ref mode (explicit + inferred) + duration clamp
+  // ---------------------------------------------------------------------------
+
+  it('videoGeneration grok-video explicit mode:image-ref with 2 assets → reference_images, no body.image, /videos/generations', async () => {
+    const dir = process.env.ASSET_TMP_DIR!
+    await storeAsset(dir, 'ast_img2', Buffer.from('IMGDATA2'), 'image/jpeg')
+
+    let capturedBody: any
+    let capturedPath = ''
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(function () {
+        capturedPath = this.req.path
+        return [200, videoSubmitFx]
+      })
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'two reference images',
+      input_assets: ['ast_img1', 'ast_img2'],
+      mode: 'image-ref',
+    } as any)
+
+    expect(result.status).toBe('queued')
+    expect(capturedPath).toContain('/v1/videos/generations')
+    expect(capturedBody.reference_images).toBeDefined()
+    expect(capturedBody.reference_images).toHaveLength(2)
+    expect(capturedBody.reference_images[0].url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1/)
+    expect(capturedBody.reference_images[1].url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img2/)
+    expect(capturedBody.image).toBeUndefined()
+    expect(capturedBody.video).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video ≥2 assets no mode → inferred image-ref (reference_images)', async () => {
+    const dir = process.env.ASSET_TMP_DIR!
+    await storeAsset(dir, 'ast_img2', Buffer.from('IMGDATA2'), 'image/jpeg')
+    await storeAsset(dir, 'ast_img3', Buffer.from('IMGDATA3'), 'image/png')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'three refs no explicit mode',
+      input_assets: ['ast_img1', 'ast_img2', 'ast_img3'],
+    } as any)
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.reference_images).toBeDefined()
+    expect(capturedBody.reference_images).toHaveLength(3)
+    expect(capturedBody.image).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video image-ref with duration 15 → body.duration clamped to 10', async () => {
+    const dir = process.env.ASSET_TMP_DIR!
+    await storeAsset(dir, 'ast_img2', Buffer.from('IMGDATA2'), 'image/jpeg')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'long image ref',
+      input_assets: ['ast_img1', 'ast_img2'],
+      mode: 'image-ref',
+      duration: '15',
+    } as any)
+
+    // xAI caps image-ref at 10s (plugin xai.ts:160); clamp applied in adapter
+    expect(capturedBody.duration).toBe(10)
+  })
+
+  it('videoGeneration grok-video explicit mode requiring an asset throws 400 when none given', async () => {
+    const adapter = new XAIAdapter('xai-test-key')
+    // video-extend / first-frame both require ≥1 asset; with none → ApiError 400.
+    for (const mode of ['video-extend', 'first-frame'] as const) {
+      await expect(
+        adapter.videoGeneration!({ model: 'grok-video', prompt: 'x', mode } as any)
+      ).rejects.toMatchObject({ code: 'invalid_request', httpStatus: 400 })
+    }
+  })
+
   it('videoGeneration grok-video forwards duration / aspect_ratio / resolution as snake_case', async () => {
     let capturedBody: any
     nock(BASE)

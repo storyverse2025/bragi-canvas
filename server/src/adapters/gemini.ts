@@ -241,38 +241,77 @@ export class GeminiAdapter implements Adapter {
     // ASSUMPTION: Veo uses predictLongRunning suffix (per docs).
     // The operation name returned is used as provider_task_id for polling.
 
-    // Build instances[0]: prompt + optional image (first asset) + optional
-    // referenceImages (additional assets). Veo LRO accepts inline bytes only —
-    // it does NOT fetch external URLs the way fal does — so we materialize each
-    // input_asset to inline-base64.
+    // Build instances[0]: prompt + optional image conditioning fields.
+    // Veo LRO accepts inline bytes only — it does NOT fetch external URLs the
+    // way fal does — so we materialize each input_asset to inline-base64.
     const instance: Record<string, unknown> = { prompt: req.prompt }
 
     const assets = req.input_assets ?? []
-    if (assets.length > 0) {
-      // Materialize all assets in parallel (matches byteplus.ts:153-158 pattern).
-      const materialized = await Promise.all(
-        assets.map((ref) => materializeAsset(ref, 'inline-base64'))
-      )
-      const [first, ...rest] = materialized
-      instance.image = {
-        bytesBase64Encoded: first.base64,
-        mimeType: first.mimeType,
-      }
 
-      if (rest.length > 0) {
-        // ASSUMPTION: Veo 3.1 reference-images shape is
-        //   instances[0].referenceImages: [{ image: { bytesBase64Encoded, mimeType } }, ...]
-        // The public docs are less explicit about this field than about the
-        // first-frame `image` field. If the wire-level shape differs (e.g.
-        // `reference_images` snake_case, or a flat array of images), update
-        // here. Live smoke (Task 31) will surface any rejection.
-        instance.referenceImages = rest.map((m) => ({
-          image: { bytesBase64Encoded: m.base64, mimeType: m.mimeType },
-        }))
+    // Compute effective mode: explicit req.mode takes priority; otherwise infer
+    // from asset count (back-compat with callers that omit mode):
+    //   0 assets → text-to-video
+    //   1 asset  → first-frame
+    //   2 assets → first-last-frame
+    //   3 assets → image-ref
+    // Mirrors plugin veo.ts:168-175 (getEffectiveMode).
+    const effectiveMode: string = req.mode ?? (
+      assets.length === 0 ? 'text-to-video' :
+      assets.length === 1 ? 'first-frame' :
+      assets.length === 2 ? 'first-last-frame' :
+      'image-ref'
+    )
+
+    // Materialize all assets in parallel when any are present.
+    const materialized = assets.length > 0
+      ? await Promise.all(assets.map((ref) => materializeAsset(ref, 'inline-base64')))
+      : []
+
+    if (effectiveMode === 'text-to-video') {
+      // No image conditioning fields.
+    } else if (effectiveMode === 'first-frame') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'veo first-frame requires at least 1 input_asset', 400)
       }
+      instance.image = {
+        bytesBase64Encoded: materialized[0].base64,
+        mimeType: materialized[0].mimeType,
+      }
+    } else if (effectiveMode === 'first-last-frame') {
+      if (materialized.length < 2) {
+        throw new ApiError('invalid_request', 'veo first-last-frame requires at least 2 input_assets', 400)
+      }
+      // First + last frame interpolation — mirrors plugin veo.ts:57-60.
+      instance.image = {
+        bytesBase64Encoded: materialized[0].base64,
+        mimeType: materialized[0].mimeType,
+      }
+      instance.lastFrame = {
+        bytesBase64Encoded: materialized[1].base64,
+        mimeType: materialized[1].mimeType,
+      }
+    } else if (effectiveMode === 'image-ref') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'veo image-ref requires at least 1 input_asset', 400)
+      }
+      // Reference images — mirrors plugin veo.ts:52-56.
+      // NOTE: referenceType:'asset' is required by the Veo API; the previous
+      // code omitted it (bug fix applied here).
+      instance.referenceImages = materialized.slice(0, 3).map((m) => ({
+        image: { bytesBase64Encoded: m.base64, mimeType: m.mimeType },
+        referenceType: 'asset',
+      }))
+      // Do NOT set instance.image for image-ref mode.
     }
 
-    const parameters: Record<string, unknown> = { aspectRatio: req.aspectRatio }
+    // Any image conditioning (first-frame, first-last-frame, or image-ref) flips
+    // personGeneration to allow_adult — mirrors plugin veo.ts:66,89.
+    const usesImageInput = Boolean(instance.image || instance.lastFrame || instance.referenceImages)
+
+    const parameters: Record<string, unknown> = {
+      aspectRatio: req.aspectRatio,
+      personGeneration: usesImageInput ? 'allow_adult' : 'allow_all',
+    }
     if (req.durationSeconds !== undefined) parameters.durationSeconds = req.durationSeconds
     if (req.resolution !== undefined) parameters.resolution = req.resolution
 
