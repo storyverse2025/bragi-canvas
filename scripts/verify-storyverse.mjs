@@ -291,18 +291,18 @@ assert.match(
 
 assert.match(
 	serverAuth,
-	/c\.json\(\{\s*ok:\s*true\s*\}\)/,
-	'server /v1/auth/check returns only { ok: true }',
+	/maskBragiToken/,
+	'server /v1/auth/check masks the token label before returning it',
 )
 assert.doesNotMatch(
 	serverAuth,
-	/label:\s*token|get\(['"]bragiToken['"]\)/,
-	'server /v1/auth/check must not echo or read the raw token into the response body',
+	/label:\s*token/,
+	'server /v1/auth/check must not echo the raw token in the response body',
 )
 assert.match(
 	serverAuthTest,
-	/not\.toHaveProperty\(['"]label['"]\)[\s\S]*not\.toContain\(['"]svsk-test-1['"]\)/,
-	'server auth test asserts the response does not contain the raw token',
+	/toBe\(['"]svsk-test-\*\*\*\*['"]\)[\s\S]*not\.toBe\(['"]svsk-test-1['"]\)/,
+	'server auth test asserts the label is masked and never equals the raw token',
 )
 
 // ── storyverse.ts defensive throws (last line of defense for non-panel callers) ──
