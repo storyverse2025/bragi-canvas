@@ -15,7 +15,7 @@ import { SYSTEM_PROMPT } from './text-gen'
  * The router (its `registry.ts`) is the source of truth for which real provider
  * serves each model, so the plugin sends ONLY `model` (+ params), never a provider.
  *
- * Contract (frozen, see server/src + https://35.168.148.47.nip.io/docs):
+ * Contract (frozen, see server/src + https://router.storyverseai.art/docs):
  *   - sync image/text  → 200 JSON
  *   - async image/video → 202 { task_id, provider, poll_after_ms, poll_url }, poll GET /v1/tasks/{provider}/{task_id}
  *   - audio speech → 200 raw bytes; music/sfx may be 200 bytes or 202 async

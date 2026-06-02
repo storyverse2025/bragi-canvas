@@ -146,7 +146,7 @@ export const DEFAULT_SETTINGS: BragiSettings = {
 			lumaToken: '',
 			xai: '',
 			dashscope: '',
-			storyverseUrl: 'https://35.168.148.47.nip.io',
+			storyverseUrl: 'https://router.storyverseai.art',
 			storyverseToken: '',
 		},
 	modelPrefs: {},
