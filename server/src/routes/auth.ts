@@ -1,5 +1,6 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
 import { z } from 'zod'
+import { maskBragiToken } from '../auth.js'
 
 export const authRoute = new OpenAPIHono()
 
@@ -24,5 +25,5 @@ const authCheckRoute = createRoute({
 authRoute.openapi(authCheckRoute, c => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const token = (c as any).get('bragiToken') as string
-  return c.json({ ok: true, label: token })
+  return c.json({ ok: true, label: maskBragiToken(token) })
 })
