@@ -4,14 +4,19 @@ import { ApiError, toErrorResponse } from './errors.js'
 /**
  * Mask a bragi token for safe echoing back to the caller (e.g. /v1/auth/check).
  * Tokens are shaped `svsk-<label>-<secret>`; we reveal the human-readable prefix
- * up to and including the final `-` (so the caller can still tell WHICH token
- * they sent) and replace the high-entropy secret suffix with `****`. The secret
- * is never returned. Tokens without a usable `-` fall back to a 4-char prefix.
+ * up to and including the label's trailing `-` (so the caller can still tell
+ * WHICH token they sent) and replace the secret with `****`.
+ *
+ * The secret itself may contain `-` (the token regex is `svsk-[A-Za-z0-9_-]+`),
+ * so we split on the FIRST `-` after the `svsk-` prefix — the label/secret
+ * boundary — NOT the last. Splitting on the last `-` would leak every secret
+ * segment except the final one. The secret is never returned. A token with no
+ * separator after the prefix falls back to masking everything after `svsk-`.
  */
 export function maskBragiToken(token: string): string {
-  const lastDash = token.lastIndexOf('-')
-  if (lastDash <= 0) return `${token.slice(0, 4)}****`
-  return `${token.slice(0, lastDash + 1)}****`
+  const sep = token.indexOf('-', 'svsk-'.length)
+  if (sep <= 0) return `${token.slice(0, 5)}****`
+  return `${token.slice(0, sep + 1)}****`
 }
 
 export function requireBragiToken(allowlist: ReadonlySet<string>): MiddlewareHandler {
