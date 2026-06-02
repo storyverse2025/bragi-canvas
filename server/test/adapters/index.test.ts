@@ -7,6 +7,8 @@ beforeEach(() => {
   delete process.env.GEMINI_API_KEY
   delete process.env.FAL_API_KEY
   delete process.env.APIMART_API_KEY
+  delete process.env.LUMA_PROXY_BEARER_TOKEN
+  delete process.env.LUMA_TOKEN
 })
 
 describe('adapterFor', () => {
@@ -44,5 +46,19 @@ describe('adapterFor', () => {
     process.env.APIMART_API_KEY = 'sk-apimart-test'
     const a = adapterFor('apimart')
     expect(a.name).toBe('apimart')
+  })
+
+  it('luma falls back to LUMA_TOKEN when LUMA_PROXY_BEARER_TOKEN is an empty string', () => {
+    // Regression: `??` would leave the empty string and break luma; `||` falls back.
+    process.env.LUMA_PROXY_BEARER_TOKEN = ''
+    process.env.LUMA_TOKEN = 'luma-token-xyz'
+    const a = adapterFor('luma')
+    expect(a.name).toBe('luma')
+  })
+
+  it('luma still unconfigured when both token vars are empty', () => {
+    process.env.LUMA_PROXY_BEARER_TOKEN = ''
+    process.env.LUMA_TOKEN = ''
+    expect(() => adapterFor('luma')).toThrow(/provider luma not configured/)
   })
 })
