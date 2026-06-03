@@ -161,6 +161,50 @@ describe('FalAdapter', () => {
     expect(result.outputs![0].url).toContain('kling-result-abc123.mp4')
   })
 
+  // ---------------------------------------------------------------------------
+  // kling mode (std/pro) — fal adapter always uses the pro endpoint path
+  // ASSUMPTION: mode is a no-op for fal (plugin hardcodes fal apiModelId to pro);
+  // std/pro distinction applies to the kling native provider, not fal.
+  // ---------------------------------------------------------------------------
+
+  it('videoGeneration kling-3.0 mode=pro uses same o3/pro path', async () => {
+    nock(BASE)
+      .post(KLING_O3_PATH)
+      .reply(200, videoSubmitFx)
+
+    const adapter = new FalAdapter('fal-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'kling-3.0',
+      prompt: 'a cinematic sunset',
+      duration: '5',
+      aspectRatio: '16:9',
+      mode: 'pro',
+    } as any)
+
+    expect(result.status).toBe('queued')
+    expect(result.provider_task_id).toContain(videoSubmitFx.request_id)
+    // The nock matched, confirming the pro path was used
+  })
+
+  it('videoGeneration kling-3.0 mode=std still uses o3/pro path (no-op on fal)', async () => {
+    nock(BASE)
+      .post(KLING_O3_PATH)
+      .reply(200, videoSubmitFx)
+
+    const adapter = new FalAdapter('fal-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'kling-3.0',
+      prompt: 'a cinematic sunset',
+      duration: '5',
+      aspectRatio: '16:9',
+      mode: 'std',
+    } as any)
+
+    expect(result.status).toBe('queued')
+    expect(result.provider_task_id).toContain(videoSubmitFx.request_id)
+    // Nock matched o3/pro path — confirms mode=std is a no-op on fal
+  })
+
   it('4xx error maps to provider_invalid_request', async () => {
     nock(BASE)
       .post(KLING_O3_PATH)

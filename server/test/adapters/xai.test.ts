@@ -74,6 +74,36 @@ describe('XAIAdapter', () => {
     expect(result.latency_ms).toBeGreaterThanOrEqual(0)
   })
 
+  // ---------------------------------------------------------------------------
+  // grok-tts — `language` is accepted in schema for plugin parity but is an
+  // HONEST no-op on the OpenAI-compatible /v1/audio/speech endpoint (which has
+  // no language field). Real support needs the native /v1/tts switch (follow-up).
+  // ---------------------------------------------------------------------------
+
+  it('grok-tts does NOT forward language to /v1/audio/speech (honest no-op; endpoint ignores it)', async () => {
+    const fakeAudio = Buffer.from('fake-mp3-audio-bytes')
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/audio/speech', body => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, fakeAudio, { 'Content-Type': 'audio/mpeg' })
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.audioSpeech!({
+      model: 'grok-tts',
+      input: 'Hello',
+      voice: 'nova',
+      response_format: 'mp3',
+      language: 'zh',
+    })
+
+    // language is intentionally absent from the body — see adapter comment.
+    expect(capturedBody.language).toBeUndefined()
+    expect(capturedBody.input).toBe('Hello')
+  })
+
   it('4xx error maps to provider_invalid_request', async () => {
     nock(BASE)
       .post('/v1/images/generations')

@@ -7,6 +7,13 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     input_assets: z.array(z.string()).max(2).optional(),
     duration: z.enum(['5', '10']).default('5'),
     aspectRatio: z.enum(['9:16', '16:9', '1:1']),
+    // mode mirrors plugin KLING_PARAMS: 'std' (Standard) or 'pro' (Pro).
+    // Accepted for parity with the plugin UI. NOTE: on the fal path it is a
+    // no-op — fal's kling endpoint is hardcoded to the pro variant and the
+    // plugin's fal provider does not read `mode` either (it only forwards mode
+    // on its tokenrouter path, which the router's kling does not use). See the
+    // ASSUMPTION note in adapters/fal.ts. Plugin: src/models/kling.ts KLING_PARAMS.
+    mode: z.enum(['std', 'pro']).default('std'),
   }),
   // seedance-2.0 / seedance-2.0-fast: text-to-video (0 assets), image-ref i2v
   // (1 image asset), or video-ref v2v (1 video asset). Mode is inferred from

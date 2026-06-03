@@ -351,12 +351,24 @@ export class XAIAdapter implements Adapter {
     const t0 = Date.now()
     const upstreamModel = TTS_MODEL_MAP[req.model] ?? req.model
 
-    const { bytes, mimeType } = await this.callBinary('/audio/speech', {
+    const ttsBody: Record<string, unknown> = {
       model: upstreamModel,
       input: req.input,
       voice: req.voice,
       response_format: req.response_format ?? 'mp3',
-    })
+    }
+
+    // NOTE: `req.language` is accepted in the schema for parity with the plugin's
+    // grok-tts UI, but it is deliberately NOT forwarded here. This adapter posts to
+    // xAI's OpenAI-compatible /v1/audio/speech, whose schema has no `language` field —
+    // sending it would be ignored at best, rejected (400) at worst. Real language
+    // support requires switching grok-tts to xAI's NATIVE /v1/tts endpoint
+    // ({ text, language, voice_id, output_format }), which the plugin uses
+    // (src/providers/xai.ts XAIAudioProvider) and which also uses xAI's native voice
+    // set (eve/ara/leo/rex/sal) rather than the OpenAI voice names this schema exposes.
+    // Tracked as a follow-up (breaking voice-enum change + needs live xAI verification).
+
+    const { bytes, mimeType } = await this.callBinary('/audio/speech', ttsBody)
 
     return {
       status: 'succeeded',

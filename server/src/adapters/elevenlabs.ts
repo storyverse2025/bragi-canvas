@@ -188,6 +188,18 @@ export class ElevenLabsAdapter implements Adapter {
       apply_text_normalization: 'auto',
     }
 
+    // Forward voice_settings if provided (stability, similarity_boost, style, speed).
+    // Mirrors plugin src/providers/elevenlabs.ts generateTTS which sends these as
+    // body.voice_settings when any setting is non-null.
+    if (req.voice_settings) {
+      body.voice_settings = {
+        stability: req.voice_settings.stability,
+        similarity_boost: req.voice_settings.similarity_boost,
+        style: req.voice_settings.style,
+        speed: req.voice_settings.speed,
+      }
+    }
+
     const { bytes, mimeType } = await this.callBinary(
       `/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
       body,

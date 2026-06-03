@@ -199,6 +199,13 @@ export class FalAdapter implements Adapter {
   async videoGeneration(
     req: Extract<VideosGenerationsRequest, { model: 'kling-2.6' | 'kling-3.0' | 'grok-video' }>,
   ): Promise<AsyncResult> {
+    // ASSUMPTION: For kling models on fal, mode ('std'/'pro') does NOT change the
+    // fal endpoint path — the plugin's apiModelId for kling-3.0 fal is hardcoded to
+    // 'fal-ai/kling-video/v3/pro' regardless of the mode param (plugin fal.ts does
+    // not read the mode field; only the genMode/first-frame/text-to-video matters).
+    // The mode param is accepted in the schema for parity with the plugin UI, but
+    // for fal it is a no-op. If kling native provider support is added later, mode
+    // should be forwarded as a body field there.
     const entry = MODEL_MAP[req.model]
     if (!entry) {
       throw new ApiError('provider_invalid_request', `Unknown fal video model: ${req.model}`, 400, null)

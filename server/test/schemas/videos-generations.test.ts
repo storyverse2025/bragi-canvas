@@ -368,4 +368,51 @@ describe('VideosGenerationsBody', () => {
       model: 'luma-uni-1', prompt: 'a sunset', aspectRatio: '16:9',
     })).toThrow()
   })
+
+  // ---------------------------------------------------------------------------
+  // kling-2.6 / kling-3.0 — mode (std/pro) parity with plugin KLING_PARAMS
+  // ---------------------------------------------------------------------------
+
+  it('kling-3.0 mode defaults to std', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'kling-3.0', prompt: 'cat walks', aspectRatio: '16:9',
+    })
+    expect((r as any).mode).toBe('std')
+  })
+
+  it('kling-2.6 mode defaults to std', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'kling-2.6', prompt: 'cat walks', aspectRatio: '9:16',
+    })
+    expect((r as any).mode).toBe('std')
+  })
+
+  it('kling-3.0 accepts mode=pro', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'kling-3.0', prompt: 'cat walks', aspectRatio: '16:9', mode: 'pro',
+    })
+    expect((r as any).mode).toBe('pro')
+  })
+
+  it('kling-3.0 accepts mode=std explicitly', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'kling-3.0', prompt: 'cat walks', aspectRatio: '16:9', mode: 'std',
+    })
+    expect((r as any).mode).toBe('std')
+  })
+
+  it('kling-3.0 rejects invalid mode value', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'kling-3.0', prompt: 'cat walks', aspectRatio: '16:9', mode: 'ultra',
+    })).toThrow()
+  })
+
+  it('kling-2.6 accepts both mode values (std/pro)', () => {
+    for (const mode of ['std', 'pro'] as const) {
+      const r = VideosGenerationsBody.parse({
+        model: 'kling-2.6', prompt: 'cat walks', aspectRatio: '16:9', mode,
+      })
+      expect((r as any).mode).toBe(mode)
+    }
+  })
 })

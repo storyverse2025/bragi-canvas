@@ -323,5 +323,61 @@ describe('ElevenLabsAdapter', () => {
         })
       ).rejects.toMatchObject({ code: 'provider_invalid_request' })
     })
+
+    // -------------------------------------------------------------------------
+    // voice_settings forwarding — plugin parity
+    // -------------------------------------------------------------------------
+
+    it('forwards voice_settings object to POST body when provided', async () => {
+      let capturedBody: any
+      nock(BASE)
+        .post('/v1/text-to-speech/pNInz6obpgDQGcFmaJgB', body => {
+          capturedBody = body
+          return true
+        })
+        .query(true)
+        .reply(200, FAKE_AUDIO, { 'Content-Type': 'audio/mpeg' })
+
+      const adapter = new ElevenLabsAdapter('el-test-key')
+      await adapter.audioSpeech!({
+        model: 'elevenlabs-tts-v3',
+        input: 'Hello with settings',
+        voice: 'adam',
+        response_format: 'mp3',
+        voice_settings: {
+          stability: 0.6,
+          similarity_boost: 0.8,
+          style: 0.1,
+          speed: 1.1,
+        },
+      })
+
+      expect(capturedBody.voice_settings).toBeDefined()
+      expect(capturedBody.voice_settings.stability).toBe(0.6)
+      expect(capturedBody.voice_settings.similarity_boost).toBe(0.8)
+      expect(capturedBody.voice_settings.style).toBe(0.1)
+      expect(capturedBody.voice_settings.speed).toBe(1.1)
+    })
+
+    it('omits voice_settings from POST body when not provided', async () => {
+      let capturedBody: any
+      nock(BASE)
+        .post('/v1/text-to-speech/pNInz6obpgDQGcFmaJgB', body => {
+          capturedBody = body
+          return true
+        })
+        .query(true)
+        .reply(200, FAKE_AUDIO, { 'Content-Type': 'audio/mpeg' })
+
+      const adapter = new ElevenLabsAdapter('el-test-key')
+      await adapter.audioSpeech!({
+        model: 'elevenlabs-tts-v3',
+        input: 'Hello without settings',
+        voice: 'pNInz6obpgDQGcFmaJgB',
+        response_format: 'mp3',
+      })
+
+      expect(capturedBody.voice_settings).toBeUndefined()
+    })
   })
 })
