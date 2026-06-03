@@ -23,6 +23,34 @@ const BASE = 'https://ark.cn-beijing.volces.com/api/v3'
 const SEEDANCE_POLL_AFTER_MS = 5_000
 const MIN_SEEDREAM_PIXELS = 3_686_400
 
+/**
+ * Resolution + aspect ratio → pixel size mapping for Seedream image generation.
+ * Mirrors plugin src/providers/seedream.ts SIZE_MAP (ground truth: bytedance Volcengine API).
+ * seedream-4.5 supports: 2K, 4K.
+ * seedream-5.0 supports: 2K, 3K.
+ */
+const SEEDREAM_SIZE_MAP: Record<string, Record<string, string>> = {
+  '1K': { '1:1': '1024x1024', '4:3': '1152x864', '3:4': '864x1152', '16:9': '1280x720', '9:16': '720x1280', '3:2': '1248x832', '2:3': '832x1248', '21:9': '1512x648' },
+  '2K': { '1:1': '2048x2048', '4:3': '2304x1728', '3:4': '1728x2304', '16:9': '2848x1600', '9:16': '1600x2848', '3:2': '2496x1664', '2:3': '1664x2496', '21:9': '3136x1344' },
+  '3K': { '1:1': '3072x3072', '4:3': '3456x2592', '3:4': '2592x3456', '16:9': '4096x2304', '9:16': '2304x4096', '3:2': '3744x2496', '2:3': '2496x3744', '21:9': '4704x2016' },
+  '4K': { '1:1': '4096x4096', '4:3': '4704x3520', '3:4': '3520x4704', '16:9': '5504x3040', '9:16': '3040x5504', '3:2': '4992x3328', '2:3': '3328x4992', '21:9': '6240x2656' },
+}
+
+/**
+ * Resolve seedream resolution + aspectRatio → WxH size string.
+ * When resolution is provided (new path), uses SEEDREAM_SIZE_MAP.
+ * Falls back to the existing aspectRatioToSeeadreamSize computation when
+ * resolution is absent (back-compat for callers that don't send resolution).
+ */
+export function seedreamSizeFromResolution(resolution: string, aspectRatio: string): string {
+  const tierMap = SEEDREAM_SIZE_MAP[resolution]
+  if (tierMap) {
+    return tierMap[aspectRatio] ?? tierMap['1:1'] ?? aspectRatioToSeeadreamSize(aspectRatio)
+  }
+  // Fallback to dynamic computation for any tier not in the static map
+  return aspectRatioToSeeadreamSize(aspectRatio)
+}
+
 /** Map our model IDs to Volcengine doubao upstream model names */
 const MODEL_MAP: Record<string, string> = {
   'seedream-4.5':       'doubao-seedream-4-5-251128',
@@ -132,7 +160,16 @@ export class ByteplusAdapter implements Adapter {
   ): Promise<SyncResult> {
     const t0 = Date.now()
     const upstreamModel = MODEL_MAP[req.model] ?? req.model
-    const size = aspectRatioToSeeadreamSize(req.aspectRatio ?? '16:9')
+    const aspectRatio = req.aspectRatio ?? '16:9'
+    // resolution field added for plugin parity:
+    //   seedream-4.5: 2K | 4K (default 2K)
+    //   seedream-5.0: 2K | 3K (default 2K)
+    // When present use SEEDREAM_SIZE_MAP; fall back to the dynamic computation
+    // for callers that omit resolution (back-compat).
+    const resolution = (req as any).resolution as string | undefined
+    const size = resolution
+      ? seedreamSizeFromResolution(resolution, aspectRatio)
+      : aspectRatioToSeeadreamSize(aspectRatio)
 
     const body: Record<string, unknown> = {
       model: upstreamModel,

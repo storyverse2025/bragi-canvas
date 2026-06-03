@@ -36,9 +36,14 @@ const BASE = 'https://api.x.ai/v1'
 /** Poll interval for grok-imagine-video tasks (seconds are estimated at ~5s intervals) */
 const XAI_VIDEO_POLL_AFTER_MS = 5_000
 
-/** Map our image model IDs to xAI upstream model names */
-const IMAGE_MODEL_MAP: Record<string, string> = {
-  'grok-imagine': 'grok-imagine-image-quality',
+/**
+ * Select upstream xAI model name for grok-imagine based on the quality param.
+ * Mirrors plugin src/providers/xai.ts:73.
+ * quality='normal' → grok-imagine-image ($0.02)
+ * quality='quality' (default) → grok-imagine-image-quality ($0.04)
+ */
+function grokImageUpstreamModel(quality?: string): string {
+  return quality === 'normal' ? 'grok-imagine-image' : 'grok-imagine-image-quality'
 }
 
 /** Map our TTS model IDs to xAI upstream model names */
@@ -285,15 +290,47 @@ export class XAIAdapter implements Adapter {
     req: Extract<ImagesGenerationsRequest, { model: 'grok-imagine' }>,
   ): Promise<SyncResult> {
     const t0 = Date.now()
-    const upstreamModel = IMAGE_MODEL_MAP[req.model] ?? req.model
+    // quality param selects the upstream tier (mirrors plugin xai.ts:73).
+    const quality = (req as any).quality as string | undefined
+    const upstreamModel = grokImageUpstreamModel(quality)
 
-    const r: any = await this.callJson('POST', '/images/generations', {
+    const hasAssets = (req as any).input_assets && (req as any).input_assets.length > 0
+
+    // Determine endpoint: text-to-image → /images/generations; image-ref → /images/edits.
+    // Mirrors plugin src/providers/xai.ts:79-95.
+    const endpoint = hasAssets ? '/images/edits' : '/images/generations'
+
+    const body: Record<string, unknown> = {
       model: upstreamModel,
       prompt: req.prompt,
-      aspect_ratio: req.aspectRatio ?? '16:9',
-      resolution: '2k',
+      aspect_ratio: req.aspectRatio ?? '1:1',
+      response_format: 'url',
       n: 1,
-    })
+    }
+
+    if (hasAssets) {
+      const inputAssets: string[] = (req as any).input_assets
+      // Materialize asset IDs to signed URLs before sending to xAI.
+      const materialized = await Promise.all(
+        inputAssets.map(async (id) => {
+          const m = await materializeAsset(id, 'url')
+          return m.url!
+        })
+      )
+      // xAI accepts EITHER `image` (single) OR `images` (array) — sending both → 400.
+      // 1 ref → body.image = {url}; 2+ refs → body.images = [{url}…] (up to 5).
+      // Mirrors plugin src/providers/xai.ts:89-95.
+      if (materialized.length === 1) {
+        body.image = { url: materialized[0] }
+      } else {
+        body.images = materialized.slice(0, 5).map(url => ({ url }))
+      }
+    } else {
+      // text-to-image: include resolution for quality tier (matches plugin xai.ts:84-86)
+      body.resolution = '2k'
+    }
+
+    const r: any = await this.callJson('POST', endpoint, body)
 
     return {
       status: 'succeeded',

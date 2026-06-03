@@ -375,6 +375,130 @@ describe('XAIAdapter', () => {
     }
   })
 
+  // ---------------------------------------------------------------------------
+  // grok-imagine: quality tier + image-ref (plugin parity)
+  // ---------------------------------------------------------------------------
+
+  it('grok-imagine quality=normal uses grok-imagine-image (not quality tier)', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, imageFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.imageGeneration!({
+      model: 'grok-imagine',
+      prompt: 'test',
+      aspectRatio: '1:1',
+      quality: 'normal',
+    } as any)
+
+    expect(capturedBody.model).toBe('grok-imagine-image')
+  })
+
+  it('grok-imagine quality=quality (default) uses grok-imagine-image-quality', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, imageFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.imageGeneration!({
+      model: 'grok-imagine',
+      prompt: 'test',
+      aspectRatio: '16:9',
+      quality: 'quality',
+    } as any)
+
+    expect(capturedBody.model).toBe('grok-imagine-image-quality')
+  })
+
+  it('grok-imagine with 1 input_asset hits /images/edits with body.image={url}', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/images/edits', (body) => { capturedBody = body; return true })
+      .reply(200, imageFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.imageGeneration!({
+      model: 'grok-imagine',
+      prompt: 'edit this',
+      aspectRatio: '1:1',
+      input_assets: ['ast_img1'],
+    } as any)
+
+    if (result.status !== 'succeeded') throw new Error('expected succeeded')
+    expect(capturedBody.image).toBeDefined()
+    expect(capturedBody.image.url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1/)
+    expect(capturedBody.images).toBeUndefined()
+  })
+
+  it('grok-imagine with 2+ input_assets hits /images/edits with body.images=[{url}…]', async () => {
+    const dir = process.env.ASSET_TMP_DIR!
+    await storeAsset(dir, 'ast_img2', Buffer.from('IMGDATA2'), 'image/png')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/images/edits', (body) => { capturedBody = body; return true })
+      .reply(200, imageFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.imageGeneration!({
+      model: 'grok-imagine',
+      prompt: 'blend these',
+      aspectRatio: '1:1',
+      input_assets: ['ast_img1', 'ast_img2'],
+    } as any)
+
+    expect(capturedBody.images).toBeDefined()
+    expect(capturedBody.images).toHaveLength(2)
+    expect(capturedBody.images[0].url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1/)
+    expect(capturedBody.images[1].url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img2/)
+    expect(capturedBody.image).toBeUndefined()
+  })
+
+  it('grok-imagine with 5 input_assets sends up to 5 in body.images', async () => {
+    const dir = process.env.ASSET_TMP_DIR!
+    for (const i of ['2', '3', '4', '5']) {
+      await storeAsset(dir, `ast_img${i}`, Buffer.from(`IMGDATA${i}`), 'image/png')
+    }
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/images/edits', (body) => { capturedBody = body; return true })
+      .reply(200, imageFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.imageGeneration!({
+      model: 'grok-imagine',
+      prompt: 'many refs',
+      aspectRatio: '1:1',
+      input_assets: ['ast_img1', 'ast_img2', 'ast_img3', 'ast_img4', 'ast_img5'],
+    } as any)
+
+    expect(capturedBody.images).toHaveLength(5)
+    expect(capturedBody.image).toBeUndefined()
+  })
+
+  it('grok-imagine text-to-image hits /images/generations (no input_assets)', async () => {
+    let capturedPath = ''
+    nock(BASE)
+      .post('/v1/images/generations', () => true)
+      .reply(function () {
+        capturedPath = this.req.path
+        return [200, imageFx]
+      })
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.imageGeneration!({
+      model: 'grok-imagine',
+      prompt: 'landscape',
+      aspectRatio: '16:9',
+    } as any)
+
+    expect(capturedPath).toContain('/v1/images/generations')
+  })
+
   it('videoGeneration grok-video forwards duration / aspect_ratio / resolution as snake_case', async () => {
     let capturedBody: any
     nock(BASE)

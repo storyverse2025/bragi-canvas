@@ -359,4 +359,13 @@ describe('VideosGenerationsBody', () => {
       model: 'veo-3.1-lite', prompt: 'x', aspectRatio: '16:9', mode: 'first-last-frame',
     })).toThrow()
   })
+
+  // ---------------------------------------------------------------------------
+  // luma-uni-1 — REMOVED from video schema (moved to image schema)
+  // ---------------------------------------------------------------------------
+  it('luma-uni-1 is NO LONGER accepted by the videos schema (moved to images)', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'luma-uni-1', prompt: 'a sunset', aspectRatio: '16:9',
+    })).toThrow()
+  })
 })

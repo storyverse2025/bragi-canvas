@@ -1,12 +1,21 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import nock from 'nock'
 import errorFx from '../fixtures/luma/error-400.json' with { type: 'json' }
-import videoSubmitFx from '../fixtures/luma/video-submit.json' with { type: 'json' }
-import taskCompletedFx from '../fixtures/luma/task-completed.json' with { type: 'json' }
 import { LumaAdapter } from '../../src/adapters/luma.js'
+import { storeAsset } from '../../src/assets.js'
 
 const PROXY_BASE = 'https://luma.bragi.now'
-const VIDEO_BASE = 'https://api.lumalabs.ai'
+
+beforeEach(async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'router-luma-'))
+  process.env.ASSET_TMP_DIR = dir
+  process.env.ASSET_SIGNING_SECRET = '0123456789abcdef0123456789abcdef'
+  process.env.ROUTER_PUBLIC_URL = 'https://router.test'
+  await storeAsset(dir, 'ast_img1', Buffer.from('IMGDATA1'), 'image/png')
+})
 
 afterEach(() => {
   nock.cleanAll()
@@ -100,38 +109,36 @@ describe('LumaAdapter — image (proxy)', () => {
   })
 })
 
-describe('LumaAdapter — video (direct Luma API)', () => {
-  it('videoGeneration returns AsyncResult with provider_task_id', async () => {
-    nock(VIDEO_BASE)
-      .post('/dream-machine/v1/generations')
-      .reply(200, videoSubmitFx)
+describe('LumaAdapter — image I2I (img2img proxy)', () => {
+  it('imageGeneration with input_asset hits /v1/images/img2img and sends image_url', async () => {
+    let capturedBody: any = null
+    let capturedPath = ''
+    nock(PROXY_BASE)
+      .post('/v1/images/img2img', (body) => { capturedBody = body; return true })
+      .reply(function () {
+        capturedPath = this.req.path
+        return [200, { image_url: 'https://luma.bragi.now/output/img-i2i.png' }]
+      })
 
     const adapter = new LumaAdapter({ bearerToken: 'luma-proxy-token', baseUrl: PROXY_BASE })
-    const result = await adapter.videoGeneration!({
+    const result = await adapter.imageGeneration!({
       model: 'luma-uni-1',
-      prompt: 'a cinematic sunset over the ocean',
+      prompt: 'edit this image',
       aspectRatio: '16:9',
+      input_assets: ['ast_img1'],
     })
 
-    expect(result.status).toBe('queued')
-    expect(result.provider).toBe('luma')
-    expect(result.provider_task_id).toBe(videoSubmitFx.id)
+    if (result.status !== 'succeeded') throw new Error('expected succeeded')
+    expect(capturedPath).toBe('/v1/images/img2img')
+    expect(capturedBody.image_url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1/)
+    expect(capturedBody.aspect_ratio).toBe('16:9')
+    expect(result.outputs[0].url).toContain('img-i2i.png')
   })
 
-  it('taskStatus for completed task returns succeeded with video output', async () => {
-    const taskId = 'luma-task-abc123'
-
-    nock(VIDEO_BASE)
-      .get(`/dream-machine/v1/generations/${taskId}`)
-      .reply(200, taskCompletedFx)
-
+  it('luma-uni-1 has no videoGeneration method (moved to image capability)', () => {
     const adapter = new LumaAdapter({ bearerToken: 'luma-proxy-token', baseUrl: PROXY_BASE })
-    const result = await adapter.taskStatus!(taskId)
-
-    expect(result.status).toBe('succeeded')
-    expect(result.outputs!).toHaveLength(1)
-    expect(result.outputs![0].kind).toBe('video')
-    expect(result.outputs![0].url).toContain('luma-result-abc123.mp4')
-    expect(result.latency_ms).toBeGreaterThanOrEqual(0)
+    // luma-uni-1 is now image-only; videoGeneration must not exist on the adapter
+    expect(adapter.videoGeneration).toBeUndefined()
+    expect(adapter.taskStatus).toBeUndefined()
   })
 })

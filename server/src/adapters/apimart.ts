@@ -47,6 +47,22 @@ function sizeToAspectRatio(size: string): string {
 }
 
 /**
+ * apimart's gpt-image-2 channel takes `size` as an aspect-ratio STRING (e.g.
+ * '1:1', '16:9') plus a separate `resolution` field for the quality tier
+ * ('1k'/'2k'/'4k') — mirrors plugin src/providers/apimart.ts:52-60 (NOT
+ * openai-image-size.ts, which emits WxH pixel strings for the OpenAI-native
+ * channel). So we map: aspectRatio → body.size (passed through verbatim, like
+ * the plugin), imageSize → body.resolution. The legacy `size` WxH field maps to
+ * an aspect-ratio string via SIZE_TO_ASPECT_RATIO for back-compat.
+ */
+const IMAGE_SIZE_TO_RESOLUTION: Record<string, string> = {
+  'auto': '2k',  // auto maps to the same default apimart uses
+  '1K':   '1k',
+  '2K':   '2k',
+  '4K':   '4k',
+}
+
+/**
  * Map our canonical model IDs to apimart's upstream model IDs.
  * apimart uses Google's official model names for nano-banana variants.
  */
@@ -103,19 +119,34 @@ export class ApimartAdapter implements Adapter {
     }
 
     if (req.model === 'gpt-image-2') {
-      // Map schema size ('1024x1024' etc.) → apimart aspect-ratio string ('1:1' etc.)
-      // Mirrors the mapping in apps/backend/app/core/apimart_images.py
-      const size = sizeToAspectRatio(req.size)
       body.model = 'gpt-image-2'
       body.n = req.n          // schema: 1-4, default 1
-      body.size = size
-      body.resolution = '2k'
+
+      // size resolution: prefer imageSize + aspectRatio (new callers); fall back
+      // to legacy `size` WxH field for back-compat.
+      if (req.size) {
+        // Legacy path: WxH size → apimart aspect-ratio string + default resolution
+        body.size = sizeToAspectRatio(req.size)
+      } else {
+        // New path: aspectRatio passes through verbatim as the apimart size string
+        // (matches plugin apimart.ts:52 — no narrowing; every schema-enum ratio is
+        // an apimart-accepted aspect ratio).
+        body.size = req.aspectRatio ?? '1:1'
+      }
+      body.resolution = IMAGE_SIZE_TO_RESOLUTION[req.imageSize] ?? '2k'
+
+      // Forward quality (plugin gpt-image.ts 'auto'|'low'|'medium'|'high'); omit
+      // 'auto' so apimart applies its own default.
+      if (req.quality && req.quality !== 'auto') {
+        body.quality = req.quality
+      }
     } else {
       // nano-banana-pro or nano-banana-2: map to apimart's Google model name
-      const upstreamModel = NANO_BANANA_MODEL_MAP[req.model]
-      body.model = upstreamModel
-      // Pass aspectRatio as size (apimart accepts aspect-ratio strings like '1:1', '16:9')
-      body.size = req.aspectRatio ?? '1:1'
+      body.model = NANO_BANANA_MODEL_MAP[req.model]
+      // apimart accepts aspect-ratio strings like '1:1', '16:9' as `size`
+      body.size = req.aspectRatio
+      // imageSize → image_size (fal/apimart field name for Gemini image models)
+      body.image_size = req.imageSize
     }
 
     // I2I: materialize asset IDs to signed URLs before forwarding (mirrors apimart_images.py _submit)

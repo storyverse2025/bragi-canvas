@@ -88,11 +88,5 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     durationSeconds: z.number().int().min(2).max(15).optional(),
     resolution: z.enum(['720p', '1080p']).optional(),
   }),
-  z.object({
-    model: z.literal('luma-uni-1'),
-    prompt: z.string().min(1),
-    input_assets: z.array(z.string()).max(2).optional(),
-    aspectRatio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4']),
-  }),
 ])
 export type VideosGenerationsRequest = z.infer<typeof VideosGenerationsBody>

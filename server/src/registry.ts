@@ -28,7 +28,7 @@ const REGISTRY: Record<string, RegistryEntry> = {
   'seedance-2.0-fast':  { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter; byteplus available as fallback
   'veo-3.1':            { provider: 'gemini',      capability: 'video', async: true },
   'veo-3.1-lite':       { provider: 'gemini',      capability: 'video', async: true },
-  'luma-uni-1':         { provider: 'luma',        capability: 'video', async: true },
+  'luma-uni-1':         { provider: 'luma',        capability: 'image', async: false },
 
   // text — gpt-5.5-pro, gemini-3-flash, gemini-3.1-pro now via tokenrouter
   'gemini-3-flash':     { provider: 'tokenrouter', capability: 'text', async: false },
