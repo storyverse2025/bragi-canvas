@@ -20,6 +20,14 @@
  *      (same as Gemini 2.5 Flash Image preview response). Confirmed from docs.
  *   4. Veo operation name is used directly as provider_task_id; polling uses
  *      GET /v1beta/{operation.name} which may include the full path segment.
+ *   5. Veo image-conditioning shapes (input_assets):
+ *      - First input_asset → `instances[0].image: { bytesBase64Encoded, mimeType }`
+ *        (well-documented for first-frame i2v).
+ *      - Additional input_assets → `instances[0].referenceImages: [{ image: {...} }]`
+ *        (Veo 3.1 reference-images / style-ref / character-ref shape; less stable in
+ *        public docs — flagged as ASSUMPTION in videoGeneration body).
+ *      - Veo LRO does NOT fetch external URLs the way fal does, so all input_assets
+ *        are materialized via `inline-base64` and forwarded as bytesBase64Encoded.
  */
 
 import type { Adapter, SyncResult, AsyncResult, TaskStatusResult } from './types.js'
@@ -28,6 +36,7 @@ import type { ChatCompletionsRequest } from '../schemas/chat-completions.js'
 import type { ImagesGenerationsRequest } from '../schemas/images-generations.js'
 import type { VideosGenerationsRequest } from '../schemas/videos-generations.js'
 import { newAssetId, signAssetUrl, storeAsset } from '../assets.js'
+import { materializeAsset } from './materialize-asset.js'
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
@@ -231,12 +240,82 @@ export class GeminiAdapter implements Adapter {
   ): Promise<AsyncResult> {
     // ASSUMPTION: Veo uses predictLongRunning suffix (per docs).
     // The operation name returned is used as provider_task_id for polling.
-    const body = {
-      instances: [{ prompt: req.prompt }],
-      parameters: {
-        aspectRatio: req.aspectRatio,
-      },
+
+    // Build instances[0]: prompt + optional image conditioning fields.
+    // Veo LRO accepts inline bytes only — it does NOT fetch external URLs the
+    // way fal does — so we materialize each input_asset to inline-base64.
+    const instance: Record<string, unknown> = { prompt: req.prompt }
+
+    const assets = req.input_assets ?? []
+
+    // Compute effective mode: explicit req.mode takes priority; otherwise infer
+    // from asset count (back-compat with callers that omit mode):
+    //   0 assets → text-to-video
+    //   1 asset  → first-frame
+    //   2 assets → first-last-frame
+    //   3 assets → image-ref
+    // Mirrors plugin veo.ts:168-175 (getEffectiveMode).
+    const effectiveMode: string = req.mode ?? (
+      assets.length === 0 ? 'text-to-video' :
+      assets.length === 1 ? 'first-frame' :
+      assets.length === 2 ? 'first-last-frame' :
+      'image-ref'
+    )
+
+    // Materialize all assets in parallel when any are present.
+    const materialized = assets.length > 0
+      ? await Promise.all(assets.map((ref) => materializeAsset(ref, 'inline-base64')))
+      : []
+
+    if (effectiveMode === 'text-to-video') {
+      // No image conditioning fields.
+    } else if (effectiveMode === 'first-frame') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'veo first-frame requires at least 1 input_asset', 400)
+      }
+      instance.image = {
+        bytesBase64Encoded: materialized[0].base64,
+        mimeType: materialized[0].mimeType,
+      }
+    } else if (effectiveMode === 'first-last-frame') {
+      if (materialized.length < 2) {
+        throw new ApiError('invalid_request', 'veo first-last-frame requires at least 2 input_assets', 400)
+      }
+      // First + last frame interpolation — mirrors plugin veo.ts:57-60.
+      instance.image = {
+        bytesBase64Encoded: materialized[0].base64,
+        mimeType: materialized[0].mimeType,
+      }
+      instance.lastFrame = {
+        bytesBase64Encoded: materialized[1].base64,
+        mimeType: materialized[1].mimeType,
+      }
+    } else if (effectiveMode === 'image-ref') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'veo image-ref requires at least 1 input_asset', 400)
+      }
+      // Reference images — mirrors plugin veo.ts:52-56.
+      // NOTE: referenceType:'asset' is required by the Veo API; the previous
+      // code omitted it (bug fix applied here).
+      instance.referenceImages = materialized.slice(0, 3).map((m) => ({
+        image: { bytesBase64Encoded: m.base64, mimeType: m.mimeType },
+        referenceType: 'asset',
+      }))
+      // Do NOT set instance.image for image-ref mode.
     }
+
+    // Any image conditioning (first-frame, first-last-frame, or image-ref) flips
+    // personGeneration to allow_adult — mirrors plugin veo.ts:66,89.
+    const usesImageInput = Boolean(instance.image || instance.lastFrame || instance.referenceImages)
+
+    const parameters: Record<string, unknown> = {
+      aspectRatio: req.aspectRatio,
+      personGeneration: usesImageInput ? 'allow_adult' : 'allow_all',
+    }
+    if (req.durationSeconds !== undefined) parameters.durationSeconds = req.durationSeconds
+    if (req.resolution !== undefined) parameters.resolution = req.resolution
+
+    const body = { instances: [instance], parameters }
 
     const r: any = await this.call(`/models/${toUpstream(req.model)}:predictLongRunning`, body)
 

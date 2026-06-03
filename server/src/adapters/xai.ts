@@ -9,9 +9,19 @@
  * Auth: Authorization: Bearer ${XAI_API_KEY}
  * Base: https://api.x.ai/v1
  *
- * Video API shape (verified 2026-05-27):
- *   Submit: POST /v1/videos/generations → { request_id }
+ * Video API shape (cross-referenced against bragi-canvas-plugin/src/providers/xai.ts
+ * which is verified against live xAI 2026-05-07):
+ *   Submit (t2v / first-frame): POST /v1/videos/generations → { request_id }
+ *     - text-to-video:   body = { model, prompt, aspect_ratio, duration, resolution }
+ *     - first-frame i2v: + body.image = { url }
+ *   Submit (video-extend):       POST /v1/videos/extensions  → { request_id }
+ *     - body = { model, prompt, duration, video: { url } }
+ *       (aspect_ratio/resolution follow the source video, ignored upstream)
  *   Poll:   GET  /v1/videos/{request_id} → { status: "pending"|"processing"|"succeeded"|"failed", progress, video_url? }
+ *
+ * Mode selection: empty input_assets → t2v; 1 image-mime asset → first-frame i2v;
+ * 1 video-mime asset → video-extend. We distinguish via the materialized asset's
+ * mimeType (image/* vs video/*).
  */
 
 import type { Adapter, AsyncResult, SyncResult, TaskStatusResult } from './types.js'
@@ -127,18 +137,89 @@ export class XAIAdapter implements Adapter {
   async videoGeneration(
     req: Extract<VideosGenerationsRequest, { model: 'grok-video' }>,
   ): Promise<AsyncResult> {
+    // Base body — forward user params. xAI uses snake_case field names per
+    // bragi-canvas-plugin/src/providers/xai.ts:162-168. duration is forwarded
+    // as a number (the plugin parses it via parseInt before sending).
+    const assets = req.input_assets ?? []
+    const materialized = await Promise.all(
+      assets.map((ref) => materializeAsset(ref, 'url'))
+    )
+
+    // Compute effective mode: explicit req.mode takes priority; otherwise infer
+    // from asset count + mimeType (back-compat with callers that omit mode):
+    //   0 assets                          → text-to-video
+    //   1 video/* asset                   → video-extend
+    //   1 non-video asset (image/*, or
+    //     application/octet-stream for
+    //     raw http URLs — falls through
+    //     to first-frame; see comment
+    //     in test for details)            → first-frame
+    //   ≥2 assets                         → image-ref
+    // Mirrors plugin xai.ts:155-189 mode derivation.
+    let effectiveMode: string
+    if (req.mode) {
+      effectiveMode = req.mode
+    } else if (materialized.length === 0) {
+      effectiveMode = 'text-to-video'
+    } else if (materialized.length === 1) {
+      const [asset] = materialized
+      if (asset.mimeType.startsWith('video/')) {
+        effectiveMode = 'video-extend'
+      } else {
+        // Treat anything non-video as image (image/*, or application/octet-stream
+        // for fetched http URLs whose Content-Type wasn't an image MIME — we
+        // default to first-frame i2v rather than video-extend, since image refs
+        // are the dominant case and the upstream will reject mismatched bytes).
+        effectiveMode = 'first-frame'
+      }
+    } else {
+      effectiveMode = 'image-ref'
+    }
+
     const body: Record<string, unknown> = {
       model: 'grok-imagine-video',
       prompt: req.prompt,
-      resolution: '720p',
     }
 
-    if (req.input_assets && req.input_assets.length > 0) {
-      const m = await materializeAsset(req.input_assets[0], 'url')
-      body.image_url = m.url
+    // Per-mode duration caps (verified against live API, 2026-05-07):
+    //   text-to-video / first-frame / video-extend: 1–15s
+    //   image-ref:                                  1–10s (plugin xai.ts:160)
+    let parsedDuration = req.duration !== undefined ? parseInt(req.duration, 10) : undefined
+    if (effectiveMode === 'image-ref' && parsedDuration !== undefined && parsedDuration > 10) {
+      parsedDuration = 10
     }
 
-    const r: any = await this.callJson('POST', '/videos/generations', body)
+    if (parsedDuration !== undefined) body.duration = parsedDuration
+    if (req.aspect_ratio !== undefined) body.aspect_ratio = req.aspect_ratio
+    if (req.resolution !== undefined) body.resolution = req.resolution
+
+    // Mode-specific asset fields and endpoint selection.
+    // xAI rejects bare-string URLs with `invalid type: string, expected struct ImageUrl`;
+    // both image and video fields must be the { url } struct shape
+    // (plugin xai.ts:18-21, :177, :184, :187-188).
+    let path = '/videos/generations'
+
+    if (effectiveMode === 'video-extend') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'grok-video video-extend requires at least 1 input_asset', 400)
+      }
+      path = '/videos/extensions'
+      body.video = { url: materialized[0].url }
+    } else if (effectiveMode === 'first-frame') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'grok-video first-frame requires at least 1 input_asset', 400)
+      }
+      body.image = { url: materialized[0].url }
+    } else if (effectiveMode === 'image-ref') {
+      if (materialized.length < 1) {
+        throw new ApiError('invalid_request', 'grok-video image-ref requires at least 1 input_asset', 400)
+      }
+      // Up to 3 reference images — mirrors plugin xai.ts:185-188.
+      body.reference_images = materialized.slice(0, 3).map((a) => ({ url: a.url }))
+    }
+    // text-to-video: no asset fields needed.
+
+    const r: any = await this.callJson('POST', path, body)
 
     const requestId: string = r.request_id
     if (!requestId) {
@@ -159,7 +240,10 @@ export class XAIAdapter implements Adapter {
     const r: any = await this.callJson('GET', `/videos/${taskId}`)
     const status: string = (r.status ?? '').toLowerCase()
 
-    if (status === 'succeeded' || status === 'completed') {
+    // xAI returns status 'done' on success (plugin src/providers/xai.ts:228 +
+    // the /v1/videos/{id} "200 done" contract). Accept succeeded/completed
+    // defensively in case the API ever changes.
+    if (status === 'done' || status === 'succeeded' || status === 'completed') {
       const videoUrl: string = r.video_url ?? r.video?.url
       if (!videoUrl) {
         return {
@@ -175,8 +259,9 @@ export class XAIAdapter implements Adapter {
       }
     }
 
-    if (status === 'failed') {
-      const msg = r.error ?? r.message ?? 'xAI video generation failed'
+    // xAI marks unrecoverable tasks 'failed' or 'expired' (plugin xai.ts:225).
+    if (status === 'failed' || status === 'expired') {
+      const msg = r.error ?? r.message ?? `xAI video generation ${status}`
       return {
         status: 'failed',
         error: {

@@ -26,6 +26,7 @@ beforeEach(async () => {
   process.env.ROUTER_PUBLIC_URL = 'https://router.test'
   await storeAsset(dir, 'ast_img1', Buffer.from('IMGDATA1'), 'image/png')
   await storeAsset(dir, 'ast_img2', Buffer.from('IMGDATA2'), 'image/png')
+  await storeAsset(dir, 'ast_vid1', Buffer.from('VIDDATA'), 'video/mp4')
 })
 
 afterEach(() => {
@@ -209,5 +210,50 @@ describe('ByteplusAdapter', () => {
     })
 
     expect(capturedBody.n).toBe(4)
+  })
+
+  it('videoGeneration v2v: video asset produces video_url/reference_video entry (no image_url)', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/api/v3/contents/generations/tasks', (body) => { capturedBody = body; return true })
+      .reply(200, videoCreatedFx)
+
+    const adapter = new ByteplusAdapter(config)
+    await adapter.videoGeneration!({
+      model: 'seedance-2.0',
+      prompt: 'video to video',
+      ratio: '16:9',
+      duration: '5',
+      generate_audio: true,
+      resolution: '720p',
+      input_assets: ['ast_vid1'],
+    })
+
+    const contentArr: Array<Record<string, unknown>> = capturedBody.content
+    const videoEntry = contentArr.find((e) => e.type === 'video_url')
+    const imageEntry = contentArr.find((e) => e.type === 'image_url')
+    expect(videoEntry).toBeDefined()
+    expect((videoEntry as any).video_url.url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_vid1\?expires=/)
+    expect((videoEntry as any).role).toBe('reference_video')
+    expect(imageEntry).toBeUndefined()
+  })
+
+  it('videoGeneration forwards resolution in body', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/api/v3/contents/generations/tasks', (body) => { capturedBody = body; return true })
+      .reply(200, videoCreatedFx)
+
+    const adapter = new ByteplusAdapter(config)
+    await adapter.videoGeneration!({
+      model: 'seedance-2.0',
+      prompt: 'hi-res clip',
+      ratio: '16:9',
+      duration: '5',
+      generate_audio: true,
+      resolution: '1080p',
+    })
+
+    expect(capturedBody.resolution).toBe('1080p')
   })
 })

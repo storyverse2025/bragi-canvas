@@ -8,6 +8,7 @@ import imgFx from '../fixtures/gemini/image-success.json' with { type: 'json' }
 import videoFx from '../fixtures/gemini/video-operation.json' with { type: 'json' }
 import errorFx from '../fixtures/gemini/error-400.json' with { type: 'json' }
 import { GeminiAdapter } from '../../src/adapters/gemini.js'
+import { storeAsset } from '../../src/assets.js'
 
 const BASE = 'https://generativelanguage.googleapis.com'
 
@@ -100,5 +101,243 @@ describe('GeminiAdapter', () => {
         messages: [{ role: 'user', content: 'bad request' }],
       })
     ).rejects.toMatchObject({ code: 'provider_invalid_request' })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Veo videoGeneration: input_assets / durationSeconds / resolution forwarding
+  // ---------------------------------------------------------------------------
+
+  it('videoGeneration text-to-video (no input_assets) sends no image / referenceImages', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1beta/models/veo-3.1-generate-preview:predictLongRunning', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoFx)
+
+    const adapter = new GeminiAdapter('test-gemini-key')
+    const result = await adapter.videoGeneration!({
+      model: 'veo-3.1',
+      prompt: 'a sunset over the ocean',
+      aspectRatio: '16:9',
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.instances[0].prompt).toBe('a sunset over the ocean')
+    expect(capturedBody.instances[0].image).toBeUndefined()
+    expect(capturedBody.instances[0].referenceImages).toBeUndefined()
+    expect(capturedBody.parameters.aspectRatio).toBe('16:9')
+    expect(capturedBody.parameters.durationSeconds).toBeUndefined()
+    expect(capturedBody.parameters.resolution).toBeUndefined()
+    // No image input → personGeneration 'allow_all' (mirrors plugin veo.ts:89)
+    expect(capturedBody.parameters.personGeneration).toBe('allow_all')
+  })
+
+  it('videoGeneration with one input_asset sends image as bytesBase64Encoded (first-frame)', async () => {
+    await storeAsset(tmpDir, 'ast_img1', Buffer.from('IMGDATA1'), 'image/png')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1beta/models/veo-3.1-generate-preview:predictLongRunning', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoFx)
+
+    const adapter = new GeminiAdapter('test-gemini-key')
+    const result = await adapter.videoGeneration!({
+      model: 'veo-3.1',
+      prompt: 'animate from this',
+      aspectRatio: '16:9',
+      input_assets: ['ast_img1'],
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.instances[0].image).toBeDefined()
+    expect(capturedBody.instances[0].image.bytesBase64Encoded).toBe(
+      Buffer.from('IMGDATA1').toString('base64'),
+    )
+    expect(capturedBody.instances[0].image.mimeType).toBe('image/png')
+    expect(capturedBody.instances[0].referenceImages).toBeUndefined()
+    // Image input → personGeneration 'allow_adult' (mirrors plugin veo.ts:89)
+    expect(capturedBody.parameters.personGeneration).toBe('allow_adult')
+  })
+
+  it('videoGeneration with 3 input_assets and no mode → inferred image-ref: referenceImages has length 3, no instance.image', async () => {
+    // Under the new inference rules: 3 assets with no explicit mode → image-ref.
+    // The old first-asset-as-image + rest-as-referenceImages hybrid is gone.
+    await storeAsset(tmpDir, 'ast_img1', Buffer.from('IMG1'), 'image/png')
+    await storeAsset(tmpDir, 'ast_img2', Buffer.from('IMG2'), 'image/jpeg')
+    await storeAsset(tmpDir, 'ast_img3', Buffer.from('IMG3'), 'image/png')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1beta/models/veo-3.1-generate-preview:predictLongRunning', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoFx)
+
+    const adapter = new GeminiAdapter('test-gemini-key')
+    const result = await adapter.videoGeneration!({
+      model: 'veo-3.1',
+      prompt: 'with style refs',
+      aspectRatio: '16:9',
+      input_assets: ['ast_img1', 'ast_img2', 'ast_img3'],
+    })
+
+    expect(result.status).toBe('queued')
+    // image-ref mode: instance.image MUST be undefined (not set)
+    expect(capturedBody.instances[0].image).toBeUndefined()
+    // All 3 assets go into referenceImages
+    expect(Array.isArray(capturedBody.instances[0].referenceImages)).toBe(true)
+    expect(capturedBody.instances[0].referenceImages).toHaveLength(3)
+    expect(capturedBody.instances[0].referenceImages[0].image.bytesBase64Encoded).toBe(
+      Buffer.from('IMG1').toString('base64'),
+    )
+    expect(capturedBody.instances[0].referenceImages[0].referenceType).toBe('asset')
+    expect(capturedBody.instances[0].referenceImages[1].image.bytesBase64Encoded).toBe(
+      Buffer.from('IMG2').toString('base64'),
+    )
+    expect(capturedBody.instances[0].referenceImages[1].referenceType).toBe('asset')
+    expect(capturedBody.instances[0].referenceImages[2].image.bytesBase64Encoded).toBe(
+      Buffer.from('IMG3').toString('base64'),
+    )
+    expect(capturedBody.instances[0].referenceImages[2].referenceType).toBe('asset')
+  })
+
+  it('videoGeneration with 2 input_assets and no mode → inferred first-last-frame: image + lastFrame set, no referenceImages', async () => {
+    await storeAsset(tmpDir, 'ast_frameA', Buffer.from('FRMA'), 'image/png')
+    await storeAsset(tmpDir, 'ast_frameB', Buffer.from('FRMB'), 'image/jpeg')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1beta/models/veo-3.1-generate-preview:predictLongRunning', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoFx)
+
+    const adapter = new GeminiAdapter('test-gemini-key')
+    const result = await adapter.videoGeneration!({
+      model: 'veo-3.1',
+      prompt: 'interpolate',
+      aspectRatio: '16:9',
+      input_assets: ['ast_frameA', 'ast_frameB'],
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.instances[0].image).toBeDefined()
+    expect(capturedBody.instances[0].image.bytesBase64Encoded).toBe(
+      Buffer.from('FRMA').toString('base64'),
+    )
+    expect(capturedBody.instances[0].image.mimeType).toBe('image/png')
+    expect(capturedBody.instances[0].lastFrame).toBeDefined()
+    expect(capturedBody.instances[0].lastFrame.bytesBase64Encoded).toBe(
+      Buffer.from('FRMB').toString('base64'),
+    )
+    expect(capturedBody.instances[0].lastFrame.mimeType).toBe('image/jpeg')
+    expect(capturedBody.instances[0].referenceImages).toBeUndefined()
+  })
+
+  it('videoGeneration explicit mode:image-ref with 1 asset → referenceImages length 1, no instance.image', async () => {
+    await storeAsset(tmpDir, 'ast_ref1', Buffer.from('REFDATA'), 'image/png')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1beta/models/veo-3.1-generate-preview:predictLongRunning', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoFx)
+
+    const adapter = new GeminiAdapter('test-gemini-key')
+    const result = await adapter.videoGeneration!({
+      model: 'veo-3.1',
+      prompt: 'ref style',
+      aspectRatio: '16:9',
+      input_assets: ['ast_ref1'],
+      mode: 'image-ref',
+    } as any)
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.instances[0].image).toBeUndefined()
+    expect(capturedBody.instances[0].referenceImages).toHaveLength(1)
+    expect(capturedBody.instances[0].referenceImages[0].referenceType).toBe('asset')
+    expect(capturedBody.instances[0].referenceImages[0].image.bytesBase64Encoded).toBe(
+      Buffer.from('REFDATA').toString('base64'),
+    )
+  })
+
+  it('videoGeneration explicit mode:first-last-frame with only 1 asset → 400 ApiError', async () => {
+    await storeAsset(tmpDir, 'ast_only1', Buffer.from('SOLO'), 'image/png')
+
+    nock(BASE)
+      .post('/v1beta/models/veo-3.1-generate-preview:predictLongRunning')
+      .reply(200, videoFx)
+
+    const adapter = new GeminiAdapter('test-gemini-key')
+    await expect(
+      adapter.videoGeneration!({
+        model: 'veo-3.1',
+        prompt: 'need two frames',
+        aspectRatio: '16:9',
+        input_assets: ['ast_only1'],
+        mode: 'first-last-frame',
+      } as any)
+    ).rejects.toMatchObject({ code: 'invalid_request', httpStatus: 400 })
+  })
+
+  it('videoGeneration forwards durationSeconds and resolution into parameters', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1beta/models/veo-3.1-generate-preview:predictLongRunning', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoFx)
+
+    const adapter = new GeminiAdapter('test-gemini-key')
+    await adapter.videoGeneration!({
+      model: 'veo-3.1',
+      prompt: 'a sunset',
+      aspectRatio: '16:9',
+      durationSeconds: 8,
+      resolution: '1080p',
+    })
+
+    expect(capturedBody.parameters.aspectRatio).toBe('16:9')
+    expect(capturedBody.parameters.durationSeconds).toBe(8)
+    expect(capturedBody.parameters.resolution).toBe('1080p')
+  })
+
+  it('videoGeneration veo-3.1-lite with single input_asset routes to lite upstream model', async () => {
+    await storeAsset(tmpDir, 'ast_img1', Buffer.from('IMGDATA1'), 'image/png')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1beta/models/veo-3.1-lite-generate-preview:predictLongRunning', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoFx)
+
+    const adapter = new GeminiAdapter('test-gemini-key')
+    const result = await adapter.videoGeneration!({
+      model: 'veo-3.1-lite',
+      prompt: 'animate from this',
+      aspectRatio: '9:16',
+      input_assets: ['ast_img1'],
+      durationSeconds: 4,
+      resolution: '720p',
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.instances[0].image.bytesBase64Encoded).toBe(
+      Buffer.from('IMGDATA1').toString('base64'),
+    )
+    expect(capturedBody.parameters.durationSeconds).toBe(4)
+    expect(capturedBody.parameters.resolution).toBe('720p')
   })
 })

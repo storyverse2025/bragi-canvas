@@ -12,10 +12,23 @@ export interface MaterializedAsset {
   mimeType: string
 }
 
+// Matches a pathname that is EXACTLY /v1/assets/ast_<hex-id> (optional trailing
+// slash) — the precise shape the router emits (uploads.ts, gemini.ts, and the
+// re-signed URL below). We match on the PATH ONLY, not the host/origin, because
+// a hostname migration is pending (nip.io → router.storyverseai.art) and clients
+// may still hold URLs issued under the old host — path-matching survives that.
+// The regex is anchored (^…$) so an external URL that merely CONTAINS the segment
+// (e.g. https://evil.com/redirect/v1/assets/ast_x, or .../ast_x/raw) is NOT
+// hijacked into a store lookup; combined with readAsset's own prefix matching,
+// an unanchored pattern would be a false-positive foot-gun.
+const ROUTER_ASSET_PATH_RE = /^\/v1\/assets\/(ast_[0-9a-f]+)\/?$/
+
 /**
  * Materialize an asset reference into the requested form.
  *
- * Accepts three input shapes:
+ * Accepts four input shapes:
+ *   - router-issued signed URL (…/v1/assets/ast_<id>?expires=…&sig=…)
+ *                → extract ast_id and resolve via local store (real MIME)
  *   - http(s):// URL  → already a public URL; use directly (or fetch for inline forms)
  *   - data:<mime>;base64,<...>  → inline data URI; parse and use directly
  *   - ast_… ID        → look up in local asset store (existing behavior)
@@ -24,6 +37,27 @@ export interface MaterializedAsset {
  * be forwarded as-is (form=url) or fetched (form=inline-*).
  */
 export async function materializeAsset(ref: string, form: AssetForm): Promise<MaterializedAsset> {
+  // --- router-issued signed URL: extract ast_id and resolve via local store ---
+  // Must be checked BEFORE the generic http(s) branch so router URLs get the
+  // real stored MIME type (e.g. video/mp4) instead of application/octet-stream.
+  if (ref.startsWith('http://') || ref.startsWith('https://')) {
+    let parsedUrl: URL | null = null
+    try {
+      parsedUrl = new URL(ref)
+    } catch {
+      // Not a valid URL — fall through to generic http(s) handling below
+    }
+
+    if (parsedUrl) {
+      const m = parsedUrl.pathname.match(ROUTER_ASSET_PATH_RE)
+      if (m) {
+        // This is a router-issued signed URL — resolve via asset store to get
+        // the real MIME type. Re-use the ast_… branch by delegating to a tail call.
+        return materializeAsset(m[1], form)
+      }
+    }
+  }
+
   // --- raw https/http URL: caller already has a public URL ---
   if (ref.startsWith('http://') || ref.startsWith('https://')) {
     if (form === 'url') {

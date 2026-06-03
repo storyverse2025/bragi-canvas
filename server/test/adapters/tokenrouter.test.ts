@@ -20,6 +20,7 @@ beforeEach(async () => {
   process.env.ASSET_SIGNING_SECRET = '0123456789abcdef0123456789abcdef'
   process.env.ROUTER_PUBLIC_URL = 'https://router.test'
   await storeAsset(dir, 'ast_img1', Buffer.from('IMGDATA1'), 'image/png')
+  await storeAsset(dir, 'ast_vid1', Buffer.from('VIDDATA'), 'video/mp4')
 })
 
 afterEach(() => {
@@ -204,6 +205,61 @@ describe('TokenrouterAdapter videoGeneration', () => {
     })
 
     expect(capturedBody.image_url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1\?expires=/)
+  })
+
+  it('v2v: video asset sets video_url (not image_url) in request body', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos', (body) => { capturedBody = body; return true })
+      .reply(200, videoCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await adapter.videoGeneration!({
+      model: 'seedance-2.0',
+      prompt: 'video to video',
+      ratio: '16:9',
+      duration: '5',
+      input_assets: ['ast_vid1'],
+    })
+
+    expect(capturedBody.video_url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_vid1\?expires=/)
+    expect(capturedBody.image_url).toBeUndefined()
+  })
+
+  it('1080p resolution for 16:9 ratio maps to size 1920x1080', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos', (body) => { capturedBody = body; return true })
+      .reply(200, videoCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await adapter.videoGeneration!({
+      model: 'seedance-2.0',
+      prompt: '1080p clip',
+      ratio: '16:9',
+      duration: '5',
+      resolution: '1080p',
+    })
+
+    expect(capturedBody.size).toBe('1920x1080')
+  })
+
+  it('480p resolution for 16:9 ratio maps to size 854x480', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos', (body) => { capturedBody = body; return true })
+      .reply(200, videoCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await adapter.videoGeneration!({
+      model: 'seedance-2.0',
+      prompt: '480p clip',
+      ratio: '16:9',
+      duration: '5',
+      resolution: '480p',
+    })
+
+    expect(capturedBody.size).toBe('854x480')
   })
 })
 

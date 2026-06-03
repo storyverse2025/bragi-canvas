@@ -37,8 +37,12 @@ function get(p: Provider): Adapter {
       if (E.FAL_API_KEY) a = new FalAdapter(E.FAL_API_KEY)
       break
     case 'luma': {
-      const bt = E.LUMA_PROXY_BEARER_TOKEN ?? E.LUMA_TOKEN
-      const bu = E.LUMA_PROXY_BASE_URL ?? 'https://luma.bragi.now'
+      // Use || not ?? — a .env commonly sets `LUMA_PROXY_BEARER_TOKEN=` (empty
+      // string), which ?? would NOT fall back from (it only coalesces null/
+      // undefined), leaving an empty token and breaking luma even when
+      // LUMA_TOKEN is set. Same for the base URL default.
+      const bt = E.LUMA_PROXY_BEARER_TOKEN || E.LUMA_TOKEN
+      const bu = E.LUMA_PROXY_BASE_URL || 'https://luma.bragi.now'
       if (bt) a = new LumaAdapter({ bearerToken: bt, baseUrl: bu })
       break
     }

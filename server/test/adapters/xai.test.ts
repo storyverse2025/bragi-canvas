@@ -99,7 +99,7 @@ describe('XAIAdapter', () => {
       model: 'grok-video',
       prompt: 'a cat running in the park',
       input_assets: ['ast_img1'],
-      duration: '6',
+      duration: '5',
     })
 
     expect(result.status).toBe('queued')
@@ -121,7 +121,9 @@ describe('XAIAdapter', () => {
     expect(result.poll_after_ms).toBeGreaterThan(0)
   })
 
-  it('taskStatus for succeeded xai video returns outputs with video url', async () => {
+  it("taskStatus maps xAI status 'done' (real success value) to succeeded with nested video.url", async () => {
+    // Real xAI returns {status:'done', video:{url}} — NOT 'succeeded'/'completed'.
+    // Fixture mirrors that so this test guards the done→succeeded mapping.
     const taskId = 'e1719105-a601-9742-84c7-test12345678'
     nock(BASE)
       .get(`/v1/videos/${taskId}`)
@@ -136,6 +138,18 @@ describe('XAIAdapter', () => {
     expect(result.outputs![0].url).toContain('xai-video-result-abc123.mp4')
   })
 
+  it("taskStatus maps xAI status 'expired' to failed (was silently stuck on running)", async () => {
+    const taskId = 'e1719105-a601-9742-84c7-testexpired1'
+    nock(BASE)
+      .get(`/v1/videos/${taskId}`)
+      .reply(200, { status: 'expired', error: { message: 'task expired' } })
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.taskStatus!(taskId)
+
+    expect(result.status).toBe('failed')
+  })
+
   it('videoGeneration missing request_id in response throws provider_unavailable', async () => {
     nock(BASE)
       .post('/v1/videos/generations')
@@ -147,8 +161,242 @@ describe('XAIAdapter', () => {
         model: 'grok-video',
         prompt: 'test',
         input_assets: ['ast_img1'],
-        duration: '6',
+        duration: '5',
       })
     ).rejects.toMatchObject({ code: 'provider_unavailable' })
+  })
+
+  // ---------------------------------------------------------------------------
+  // grok-video: t2v / first-frame / video-extend branching + param forwarding
+  // ---------------------------------------------------------------------------
+
+  it('videoGeneration grok-video text-to-video sends no image/video field', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'a sunset over the ocean',
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.model).toBe('grok-imagine-video')
+    expect(capturedBody.prompt).toBe('a sunset over the ocean')
+    expect(capturedBody.image).toBeUndefined()
+    expect(capturedBody.video).toBeUndefined()
+    expect(capturedBody.image_url).toBeUndefined()
+    expect(capturedBody.video_url).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video first-frame i2v sends image: { url } (image asset)', async () => {
+    // ast_img1 is stored as image/png in beforeEach
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'animate from this frame',
+      input_assets: ['ast_img1'],
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.image).toBeDefined()
+    expect(capturedBody.image.url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1/)
+    expect(capturedBody.video).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video video-extend sends video: { url } and hits /videos/extensions (video asset)', async () => {
+    // Store a video-mime asset to trigger the video-extend branch
+    const dir = process.env.ASSET_TMP_DIR!
+    await storeAsset(dir, 'ast_vid1', Buffer.from('VIDEODATA'), 'video/mp4')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/extensions', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'continue this video',
+      input_assets: ['ast_vid1'],
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.video).toBeDefined()
+    expect(capturedBody.video.url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_vid1/)
+    expect(capturedBody.image).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video: raw http(s) URL asset routes to first-frame i2v (octet-stream falls through to image)', async () => {
+    // Documents current behaviour (xai.ts:168-177): materializeAsset(url,'url')
+    // returns application/octet-stream WITHOUT fetching (materialize-asset.ts:30),
+    // so a raw/signed *video* URL cannot reach the video-extend branch and is
+    // sent as a first-frame image instead. Resolving real MIME for URL-form
+    // assets is Task 1.4's scope (router-issued signed URLs); this test pins the
+    // present behaviour so the change there is deliberate, not silent.
+    let capturedBody: any
+    let capturedPath = ''
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(function () {
+        capturedPath = this.req.path
+        return [200, videoSubmitFx]
+      })
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'extend this clip',
+      input_assets: ['https://cdn.example.com/clip.mp4'],
+    })
+
+    expect(result.status).toBe('queued')
+    expect(capturedPath).toContain('/v1/videos/generations') // NOT /videos/extensions
+    expect(capturedBody.image).toBeDefined()
+    expect(capturedBody.image.url).toBe('https://cdn.example.com/clip.mp4')
+    expect(capturedBody.video).toBeUndefined()
+  })
+
+  // ---------------------------------------------------------------------------
+  // grok-video: image-ref mode (explicit + inferred) + duration clamp
+  // ---------------------------------------------------------------------------
+
+  it('videoGeneration grok-video explicit mode:image-ref with 2 assets → reference_images, no body.image, /videos/generations', async () => {
+    const dir = process.env.ASSET_TMP_DIR!
+    await storeAsset(dir, 'ast_img2', Buffer.from('IMGDATA2'), 'image/jpeg')
+
+    let capturedBody: any
+    let capturedPath = ''
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(function () {
+        capturedPath = this.req.path
+        return [200, videoSubmitFx]
+      })
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'two reference images',
+      input_assets: ['ast_img1', 'ast_img2'],
+      mode: 'image-ref',
+    } as any)
+
+    expect(result.status).toBe('queued')
+    expect(capturedPath).toContain('/v1/videos/generations')
+    expect(capturedBody.reference_images).toBeDefined()
+    expect(capturedBody.reference_images).toHaveLength(2)
+    expect(capturedBody.reference_images[0].url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1/)
+    expect(capturedBody.reference_images[1].url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img2/)
+    expect(capturedBody.image).toBeUndefined()
+    expect(capturedBody.video).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video ≥2 assets no mode → inferred image-ref (reference_images)', async () => {
+    const dir = process.env.ASSET_TMP_DIR!
+    await storeAsset(dir, 'ast_img2', Buffer.from('IMGDATA2'), 'image/jpeg')
+    await storeAsset(dir, 'ast_img3', Buffer.from('IMGDATA3'), 'image/png')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'three refs no explicit mode',
+      input_assets: ['ast_img1', 'ast_img2', 'ast_img3'],
+    } as any)
+
+    expect(result.status).toBe('queued')
+    expect(capturedBody.reference_images).toBeDefined()
+    expect(capturedBody.reference_images).toHaveLength(3)
+    expect(capturedBody.image).toBeUndefined()
+  })
+
+  it('videoGeneration grok-video image-ref with duration 15 → body.duration clamped to 10', async () => {
+    const dir = process.env.ASSET_TMP_DIR!
+    await storeAsset(dir, 'ast_img2', Buffer.from('IMGDATA2'), 'image/jpeg')
+
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'long image ref',
+      input_assets: ['ast_img1', 'ast_img2'],
+      mode: 'image-ref',
+      duration: '15',
+    } as any)
+
+    // xAI caps image-ref at 10s (plugin xai.ts:160); clamp applied in adapter
+    expect(capturedBody.duration).toBe(10)
+  })
+
+  it('videoGeneration grok-video explicit mode requiring an asset throws 400 when none given', async () => {
+    const adapter = new XAIAdapter('xai-test-key')
+    // video-extend / first-frame both require ≥1 asset; with none → ApiError 400.
+    for (const mode of ['video-extend', 'first-frame'] as const) {
+      await expect(
+        adapter.videoGeneration!({ model: 'grok-video', prompt: 'x', mode } as any)
+      ).rejects.toMatchObject({ code: 'invalid_request', httpStatus: 400 })
+    }
+  })
+
+  it('videoGeneration grok-video forwards duration / aspect_ratio / resolution as snake_case', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/videos/generations', (body) => {
+        capturedBody = body
+        return true
+      })
+      .reply(200, videoSubmitFx)
+
+    const adapter = new XAIAdapter('xai-test-key')
+    await adapter.videoGeneration!({
+      model: 'grok-video',
+      prompt: 'a sunset',
+      duration: '10',
+      aspect_ratio: '9:16',
+      resolution: '1080p',
+    })
+
+    // xAI takes duration as a number (plugin parseInt's it before sending);
+    // aspect_ratio + resolution are snake_case strings.
+    expect(capturedBody.duration).toBe(10)
+    expect(capturedBody.aspect_ratio).toBe('9:16')
+    expect(capturedBody.resolution).toBe('1080p')
   })
 })

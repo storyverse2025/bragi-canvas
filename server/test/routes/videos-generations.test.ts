@@ -45,19 +45,23 @@ describe('POST /v1/videos/generations', () => {
     expect(body.error.code).toBe('invalid_request')
   })
 
-  it('provider override to valid alternate returns 202 (grok-video via xai)', async () => {
+  it('provider override to valid alternate routes to xai (grok-video, t2v)', async () => {
     process.env.XAI_API_KEY = 'xai-test'
-    nock('https://api.x.ai')
+    const scope = nock('https://api.x.ai')
       .post('/v1/videos/generations')
       .reply(200, { request_id: 'override-task-abc' })
+    // t2v (no input_assets) + a valid duration so the request actually reaches
+    // the xai adapter — proves the override routed to xai, not the default.
     const res = await buildApp().request('/v1/videos/generations', {
       method: 'POST',
       headers: { Authorization: 'Bearer svsk-test-1', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'grok-video', prompt: 'test', input_assets: ['ast_fake'], duration: '6', provider: 'xai' }),
+      body: JSON.stringify({ model: 'grok-video', prompt: 'test', duration: '5', provider: 'xai' }),
     })
-    // Note: will 400 if ast_fake can't be materialized, but that's a 400 not a 404/500,
-    // so we just verify the provider routing actually tried xai (not fal)
-    expect([202, 400]).toContain(res.status)
+    expect(res.status).toBe(202)
+    const body = await res.json()
+    expect(body.provider).toBe('xai')
+    expect(body.task_id).toBeDefined()
+    expect(scope.isDone()).toBe(true) // the xAI endpoint was actually called
   })
 
   it('provider override to invalid provider returns 400 with options', async () => {

@@ -31,7 +31,7 @@ async function smokeOne(model: string): Promise<Result> {
       const req: any = { model, prompt: 'cat walks' }
       if (model.startsWith('kling')) { req.duration = '5'; req.aspectRatio = '9:16' }
       else if (model.startsWith('seedance')) { req.duration = '5'; req.ratio = '9:16'; req.resolution = '480p'; req.generate_audio = false }
-      else if (model === 'grok-video') req.duration = '6'
+      else if (model === 'grok-video') req.duration = '5'
       else if (model.startsWith('veo')) req.aspectRatio = '9:16'
       else if (model === 'luma-uni-1') req.aspectRatio = '9:16'
       await a.videoGeneration(req)
