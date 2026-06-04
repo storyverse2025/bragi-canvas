@@ -50,6 +50,9 @@ const REGISTRY: Record<string, RegistryEntry> = {
   'elevenlabs-tts-v3':  { provider: 'elevenlabs',  capability: 'audio', async: false },
   'elevenlabs-music':   { provider: 'elevenlabs',  capability: 'audio', async: false },
   'elevenlabs-sfx':     { provider: 'elevenlabs',  capability: 'audio', async: false },
+  // minimax audio via fal queue (async — fal submit → poll → audio URL)
+  'minimax-tts':        { provider: 'fal',         capability: 'audio', async: true  },
+  'minimax-music':      { provider: 'fal',         capability: 'audio', async: true  },
 }
 
 /**
@@ -90,6 +93,8 @@ export const MODEL_PROVIDER_OPTIONS: Record<string, Set<Provider>> = {
   'elevenlabs-tts-v3':  new Set(['elevenlabs', 'fal']),
   'elevenlabs-music':   new Set(['elevenlabs', 'fal']),
   'elevenlabs-sfx':     new Set(['elevenlabs', 'fal']),
+  'minimax-tts':        new Set(['fal']),
+  'minimax-music':      new Set(['fal']),
 }
 
 export function lookupModel(modelId: string): RegistryEntry | undefined {

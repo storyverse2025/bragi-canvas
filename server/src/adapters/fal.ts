@@ -3,9 +3,9 @@
  *
  * Supported models (all async via fal queue API):
  *   Video:        kling-2.6, kling-3.0, grok-video
- *   Audio (music): elevenlabs-music
+ *   Audio (music): elevenlabs-music, minimax-music
  *   Audio (sfx):   elevenlabs-sfx
- *   Audio (TTS):   elevenlabs-tts-v3 (queue-based, returns AsyncResult)
+ *   Audio (TTS):   elevenlabs-tts-v3, minimax-tts (queue-based, return AsyncResult)
  *
  * Auth: Authorization: Key ${FAL_API_KEY}
  * Base: https://queue.fal.run
@@ -80,6 +80,13 @@ const MODEL_MAP: Record<string, ModelEntry> = {
   },
   'elevenlabs-tts-v3': {
     path: 'fal-ai/elevenlabs/tts/v3',
+  },
+  // minimax audio models via fal — from plugin src/models/audio.ts supportedProviders.fal
+  'minimax-tts': {
+    path: 'fal-ai/minimax/speech-2.8-hd',
+  },
+  'minimax-music': {
+    path: 'fal-ai/minimax-music/v2.6',
   },
   // Image models
   'nano-banana-pro': {
@@ -249,16 +256,35 @@ export class FalAdapter implements Adapter {
     return this.submitToQueue(modelPath, body)
   }
 
+  /**
+   * audioMusic handles both elevenlabs-music and minimax-music via the fal queue.
+   *
+   * elevenlabs-music: forwards prompt, duration_seconds, instrumental (boolean)
+   * minimax-music:    forwards prompt and instrumental (boolean, parsed from string enum)
+   *                   ASSUMPTION: fal-ai/minimax-music/v2.6 accepts 'prompt' and
+   *                   'instrumental' (boolean) fields. Duration is not a minimax-music
+   *                   param in the plugin schema — omitted.
+   */
   async audioMusic(req: AudioMusicRequest): Promise<AsyncResult> {
     const entry = MODEL_MAP[req.model]
     if (!entry) {
       throw new ApiError('provider_invalid_request', `Unknown fal audio model: ${req.model}`, 400, null)
     }
 
-    const body: Record<string, unknown> = {
-      prompt: req.prompt,
-      duration_seconds: Math.round(req.duration_ms / 1000),
-      instrumental: req.instrumental ?? false,
+    let body: Record<string, unknown>
+
+    if (req.model === 'minimax-music') {
+      body = {
+        prompt: req.prompt,
+        // instrumental is a string enum ('true'/'false') in the schema; convert to boolean
+        instrumental: req.instrumental === 'true',
+      }
+    } else {
+      body = {
+        prompt: req.prompt,
+        duration_seconds: Math.round(req.duration_ms / 1000),
+        instrumental: req.instrumental ?? false,
+      }
     }
 
     return this.submitToQueue(entry.path, body)
@@ -282,18 +308,37 @@ export class FalAdapter implements Adapter {
    * audioSpeech returns AsyncResult because fal TTS is queue-based.
    * Note: this widens the return type from the Adapter interface default
    * (sync bytes) — types.ts has been updated to allow this.
+   *
+   * Supported fal TTS models:
+   *   elevenlabs-tts-v3 → fal-ai/elevenlabs/tts/v3
+   *   minimax-tts        → fal-ai/minimax/speech-2.8-hd (voice + speed forwarded)
    */
-  async audioSpeech(req: Extract<AudioSpeechRequest, { model: 'elevenlabs-tts-v3' }>): Promise<AsyncResult> {
+  async audioSpeech(
+    req: Extract<AudioSpeechRequest, { model: 'elevenlabs-tts-v3' | 'minimax-tts' }>,
+  ): Promise<AsyncResult> {
     const entry = MODEL_MAP[req.model]
     if (!entry) {
       throw new ApiError('provider_invalid_request', `Unknown fal tts model: ${req.model}`, 400, null)
     }
 
-    const body: Record<string, unknown> = {
-      text: req.input,
-      voice: req.voice,
-      // ASSUMPTION: fal elevenlabs TTS accepts 'output_format' similar to ElevenLabs API
-      output_format: req.response_format ?? 'mp3',
+    let body: Record<string, unknown>
+
+    if (req.model === 'minimax-tts') {
+      // ASSUMPTION: fal-ai/minimax/speech-2.8-hd accepts 'text', 'voice_id', and
+      // 'speed' fields based on MiniMax Speech API conventions (speed as a number).
+      // Voice is passed as 'voice_id' per the fal minimax TTS schema.
+      body = {
+        text: req.input,
+        voice_id: req.voice,
+        speed: parseFloat(req.speed),
+      }
+    } else {
+      body = {
+        text: req.input,
+        voice: req.voice,
+        // ASSUMPTION: fal elevenlabs TTS accepts 'output_format' similar to ElevenLabs API
+        output_format: req.response_format ?? 'mp3',
+      }
     }
 
     return this.submitToQueue(entry.path, body)

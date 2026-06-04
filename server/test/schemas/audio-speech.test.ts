@@ -129,4 +129,55 @@ describe('AudioSpeechBody', () => {
       expect((r as any).voice_settings.speed).toBe(speed)
     }
   })
+
+  // ---------------------------------------------------------------------------
+  // minimax-tts — voice enum + speed enum parity with plugin src/models/audio.ts
+  // ---------------------------------------------------------------------------
+
+  it('minimax-tts parses with defaults', () => {
+    const r = AudioSpeechBody.parse({ model: 'minimax-tts', input: 'Hello' })
+    expect((r as any).voice).toBe('English_Graceful_Lady')
+    expect((r as any).speed).toBe('1.0')
+  })
+
+  it('minimax-tts accepts all 12 voice options from plugin', () => {
+    const voices = [
+      'English_Graceful_Lady',
+      'English_Insightful_Speaker',
+      'English_radiant_girl',
+      'English_Persuasive_Man',
+      'English_Lucky_Robot',
+      'Chinese (Mandarin)_Gentleman',
+      'Chinese (Mandarin)_Unrestrained_Young_Man',
+      'Chinese (Mandarin)_Straightforward_Boy',
+      'Chinese (Mandarin)_Warm_HeartedGirl',
+      'Chinese (Mandarin)_IntellectualGirl',
+      'Chinese (Mandarin)_Cute_Spirit',
+      'Chinese (Mandarin)_Stubborn_Friend',
+    ] as const
+    for (const voice of voices) {
+      const r = AudioSpeechBody.parse({ model: 'minimax-tts', input: 'test', voice })
+      expect((r as any).voice).toBe(voice)
+    }
+  })
+
+  it('minimax-tts accepts all 6 speed options from plugin', () => {
+    const speeds = ['0.5', '0.75', '1.0', '1.25', '1.5', '2.0'] as const
+    for (const speed of speeds) {
+      const r = AudioSpeechBody.parse({ model: 'minimax-tts', input: 'test', voice: 'English_Graceful_Lady', speed })
+      expect((r as any).speed).toBe(speed)
+    }
+  })
+
+  it('minimax-tts rejects an unknown voice', () => {
+    expect(() => AudioSpeechBody.parse({
+      model: 'minimax-tts', input: 'test', voice: 'Unknown_Voice',
+    })).toThrow()
+  })
+
+  it('minimax-tts rejects an invalid speed value', () => {
+    expect(() => AudioSpeechBody.parse({
+      model: 'minimax-tts', input: 'test', voice: 'English_Graceful_Lady', speed: '3.0',
+    })).toThrow()
+  })
 })

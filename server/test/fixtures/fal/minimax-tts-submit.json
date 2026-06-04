@@ -1,0 +1,8 @@
+{
+  "request_id": "minimax-tts-req-aaaa-bbbb-cccc-ddddeeeefffff",
+  "status": "IN_QUEUE",
+  "queue_position": 0,
+  "response_url": "https://queue.fal.run/fal-ai/minimax/speech-2.8-hd/requests/minimax-tts-req-aaaa-bbbb-cccc-ddddeeeefffff",
+  "status_url": "https://queue.fal.run/fal-ai/minimax/speech-2.8-hd/requests/minimax-tts-req-aaaa-bbbb-cccc-ddddeeeefffff/status",
+  "cancel_url": "https://queue.fal.run/fal-ai/minimax/speech-2.8-hd/requests/minimax-tts-req-aaaa-bbbb-cccc-ddddeeeefffff/cancel"
+}

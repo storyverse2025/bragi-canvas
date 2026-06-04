@@ -29,6 +29,30 @@ export const AudioSpeechBody = z.discriminatedUnion('model', [
       speed: z.number().min(0.7).max(1.2).default(1),
     }).optional(),
   }),
+  z.object({
+    // minimax-tts via fal — async queue (returns AsyncResult, not sync bytes)
+    // Mirrors plugin src/models/audio.ts minimaxTTS params exactly.
+    // fal upstream: fal-ai/minimax/speech-2.8-hd
+    model: z.literal('minimax-tts'),
+    input: z.string().min(1),
+    // 12 voice options from plugin src/models/audio.ts minimaxTTS
+    voice: z.enum([
+      'English_Graceful_Lady',
+      'English_Insightful_Speaker',
+      'English_radiant_girl',
+      'English_Persuasive_Man',
+      'English_Lucky_Robot',
+      'Chinese (Mandarin)_Gentleman',
+      'Chinese (Mandarin)_Unrestrained_Young_Man',
+      'Chinese (Mandarin)_Straightforward_Boy',
+      'Chinese (Mandarin)_Warm_HeartedGirl',
+      'Chinese (Mandarin)_IntellectualGirl',
+      'Chinese (Mandarin)_Cute_Spirit',
+      'Chinese (Mandarin)_Stubborn_Friend',
+    ]).default('English_Graceful_Lady'),
+    // speed options from plugin src/models/audio.ts minimaxTTS (string select)
+    speed: z.enum(['0.5', '0.75', '1.0', '1.25', '1.5', '2.0']).default('1.0'),
+  }),
 ])
 
 export type AudioSpeechRequest = z.infer<typeof AudioSpeechBody>

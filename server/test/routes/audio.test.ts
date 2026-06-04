@@ -101,4 +101,61 @@ describe('POST /v1/audio/speech', () => {
     // 200 should not have application/json content (audio is bytes)
     expect(audioSpeech200?.content?.['application/json']).toBeUndefined()
   })
+
+  // ---------------------------------------------------------------------------
+  // minimax-tts via fal — async route (202 + task_id)
+  // ---------------------------------------------------------------------------
+
+  it('minimax-tts routes to fal and returns 202 with task_id', async () => {
+    process.env.FAL_API_KEY = 'fal-test-key'
+    nock('https://queue.fal.run')
+      .post('/fal-ai/minimax/speech-2.8-hd')
+      .reply(200, {
+        request_id: 'minimax-tts-route-test-req-id',
+        status: 'IN_QUEUE',
+      })
+    const res = await buildApp().request('/v1/audio/speech', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer svsk-test-1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'minimax-tts',
+        input: 'Hello from minimax',
+        voice: 'English_Graceful_Lady',
+        speed: '1.0',
+      }),
+    })
+    expect(res.status).toBe(202)
+    const body = await res.json() as any
+    expect(body.task_id).toBeDefined()
+    expect(body.provider).toBe('fal')
+    expect(body.poll_url).toContain('/v1/tasks/fal/')
+  })
+
+  // ---------------------------------------------------------------------------
+  // minimax-music via fal — async route (202 + task_id)
+  // ---------------------------------------------------------------------------
+
+  it('minimax-music routes to fal and returns 202 with task_id', async () => {
+    process.env.FAL_API_KEY = 'fal-test-key'
+    nock('https://queue.fal.run')
+      .post('/fal-ai/minimax-music/v2.6')
+      .reply(200, {
+        request_id: 'minimax-music-route-test-req-id',
+        status: 'IN_QUEUE',
+      })
+    const res = await buildApp().request('/v1/audio/music', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer svsk-test-1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'minimax-music',
+        prompt: 'A serene instrumental track',
+        instrumental: 'true',
+      }),
+    })
+    expect(res.status).toBe(202)
+    const body = await res.json() as any
+    expect(body.task_id).toBeDefined()
+    expect(body.provider).toBe('fal')
+    expect(body.poll_url).toContain('/v1/tasks/fal/')
+  })
 })
