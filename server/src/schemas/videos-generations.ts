@@ -7,6 +7,13 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     input_assets: z.array(z.string()).max(2).optional(),
     duration: z.enum(['5', '10']).default('5'),
     aspectRatio: z.enum(['9:16', '16:9', '1:1']),
+    // mode mirrors plugin KLING_PARAMS: 'std' (Standard) or 'pro' (Pro).
+    // Accepted for parity with the plugin UI. NOTE: on the fal path it is a
+    // no-op — fal's kling endpoint is hardcoded to the pro variant and the
+    // plugin's fal provider does not read `mode` either (it only forwards mode
+    // on its tokenrouter path, which the router's kling does not use). See the
+    // ASSUMPTION note in adapters/fal.ts. Plugin: src/models/kling.ts KLING_PARAMS.
+    mode: z.enum(['std', 'pro']).default('std'),
   }),
   // seedance-2.0 / seedance-2.0-fast: text-to-video (0 assets), image-ref i2v
   // (1 image asset), or video-ref v2v (1 video asset). Mode is inferred from
@@ -73,6 +80,19 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     durationSeconds: z.number().int().min(2).max(15).optional(),
     resolution: z.enum(['720p', '1080p']).optional(),
   }),
+  // happyhorse-1.0-t2v: text-to-video, no params. Upstream model id is used as-is.
+  // Plugin ground truth: bragi-canvas-plugin/src/models/happyhorse.ts (params: []).
+  z.object({
+    model: z.literal('happyhorse-1.0-t2v'),
+    prompt: z.string().min(1),
+  }),
+  // happyhorse-1.0-i2v: first-frame (image-to-video), 1 image asset required.
+  // Plugin ground truth: bragi-canvas-plugin/src/models/happyhorse.ts (params: []).
+  z.object({
+    model: z.literal('happyhorse-1.0-i2v'),
+    prompt: z.string().min(1),
+    input_assets: z.array(z.string()).max(1).optional(),
+  }),
   // veo-3.1-lite: only text-to-video or first-frame (1 asset max) per plugin's
   // INPUT_ASSETS_MAX table. image-ref / first-last-frame are not supported.
   // `mode` is optional — omit to use inference (back-compat).
@@ -87,12 +107,6 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     mode: z.enum(['text-to-video', 'first-frame']).optional(),
     durationSeconds: z.number().int().min(2).max(15).optional(),
     resolution: z.enum(['720p', '1080p']).optional(),
-  }),
-  z.object({
-    model: z.literal('luma-uni-1'),
-    prompt: z.string().min(1),
-    input_assets: z.array(z.string()).max(2).optional(),
-    aspectRatio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4']),
   }),
 ])
 export type VideosGenerationsRequest = z.infer<typeof VideosGenerationsBody>

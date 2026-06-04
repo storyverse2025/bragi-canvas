@@ -1,0 +1,8 @@
+{
+  "request_id": "minimax-music-req-1111-2222-3333-444455556666",
+  "status": "IN_QUEUE",
+  "queue_position": 0,
+  "response_url": "https://queue.fal.run/fal-ai/minimax-music/v2.6/requests/minimax-music-req-1111-2222-3333-444455556666",
+  "status_url": "https://queue.fal.run/fal-ai/minimax-music/v2.6/requests/minimax-music-req-1111-2222-3333-444455556666/status",
+  "cancel_url": "https://queue.fal.run/fal-ai/minimax-music/v2.6/requests/minimax-music-req-1111-2222-3333-444455556666/cancel"
+}

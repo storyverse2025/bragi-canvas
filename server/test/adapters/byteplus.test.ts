@@ -7,7 +7,7 @@ import imgFx from '../fixtures/byteplus/image-success.json' with { type: 'json' 
 import videoCreatedFx from '../fixtures/byteplus/video-task-created.json' with { type: 'json' }
 import videoSucceededFx from '../fixtures/byteplus/video-task-succeeded.json' with { type: 'json' }
 import errorFx from '../fixtures/byteplus/error-400.json' with { type: 'json' }
-import { ByteplusAdapter, aspectRatioToSeeadreamSize } from '../../src/adapters/byteplus.js'
+import { ByteplusAdapter, aspectRatioToSeeadreamSize, seedreamSizeFromResolution } from '../../src/adapters/byteplus.js'
 import { storeAsset } from '../../src/assets.js'
 
 const BASE = 'https://ark.cn-beijing.volces.com'
@@ -236,6 +236,100 @@ describe('ByteplusAdapter', () => {
     expect((videoEntry as any).video_url.url).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_vid1\?expires=/)
     expect((videoEntry as any).role).toBe('reference_video')
     expect(imageEntry).toBeUndefined()
+  })
+
+  // ---------------------------------------------------------------------------
+  // Seedream resolution → size mapping (plugin parity)
+  // ---------------------------------------------------------------------------
+
+  it('imageGeneration forwards resolution 2K → correct WxH size for 1:1', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/api/v3/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, imgFx)
+
+    const adapter = new ByteplusAdapter(config)
+    await adapter.imageGeneration!({
+      model: 'seedream-5.0',
+      prompt: 'test',
+      aspectRatio: '1:1',
+      n: 1,
+      resolution: '2K',
+    } as any)
+
+    // plugin SIZE_MAP['2K']['1:1'] = '2048x2048'
+    expect(capturedBody.size).toBe('2048x2048')
+  })
+
+  it('imageGeneration forwards resolution 4K → correct WxH size for 16:9 (seedream-4.5)', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/api/v3/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, imgFx)
+
+    const adapter = new ByteplusAdapter(config)
+    await adapter.imageGeneration!({
+      model: 'seedream-4.5',
+      prompt: 'test',
+      aspectRatio: '16:9',
+      n: 1,
+      resolution: '4K',
+    } as any)
+
+    // plugin SIZE_MAP['4K']['16:9'] = '5504x3040'
+    expect(capturedBody.size).toBe('5504x3040')
+  })
+
+  it('imageGeneration forwards resolution 3K → correct WxH size for 9:16 (seedream-5.0)', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/api/v3/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, imgFx)
+
+    const adapter = new ByteplusAdapter(config)
+    await adapter.imageGeneration!({
+      model: 'seedream-5.0',
+      prompt: 'test',
+      aspectRatio: '9:16',
+      n: 1,
+      resolution: '3K',
+    } as any)
+
+    // plugin SIZE_MAP['3K']['9:16'] = '2304x4096'
+    expect(capturedBody.size).toBe('2304x4096')
+  })
+
+  it('seedreamSizeFromResolution resolves 2K + 16:9 to 2848x1600', () => {
+    expect(seedreamSizeFromResolution('2K', '16:9')).toBe('2848x1600')
+  })
+
+  it('seedreamSizeFromResolution falls back to dynamic computation for unknown tier', () => {
+    // Any unknown tier string not in the map should use the dynamic formula
+    const size = seedreamSizeFromResolution('8K', '1:1')
+    const [w, h] = size.split('x').map(Number)
+    expect(w).toBeGreaterThan(0)
+    expect(h).toBeGreaterThan(0)
+  })
+
+  it('imageGeneration without resolution falls back to dynamic aspectRatio computation (back-compat)', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/api/v3/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, imgFx)
+
+    const adapter = new ByteplusAdapter(config)
+    await adapter.imageGeneration!({
+      model: 'seedream-4.5',
+      prompt: 'test',
+      aspectRatio: '1:1',
+      n: 1,
+      // no resolution field — uses legacy dynamic computation
+    })
+
+    // Dynamic computation for 1:1 produces a square above 3,686,400px
+    const [w, h] = capturedBody.size.split('x').map(Number)
+    expect(w).toBe(h)
+    expect(w * h).toBeGreaterThanOrEqual(3_686_400)
   })
 
   it('videoGeneration forwards resolution in body', async () => {

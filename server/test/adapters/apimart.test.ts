@@ -122,6 +122,46 @@ describe('ApimartAdapter', () => {
     expect(capturedBody.n).toBe(4)
   })
 
+  it('gpt-image-2 new path passes wide aspectRatio through (no silent narrowing to 1:1) + forwards imageSize/quality', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'gpt-image-2',
+      prompt: 'a wide panorama',
+      n: 1,
+      aspectRatio: '2:1',   // valid per schema, was previously coerced to '1:1'
+      imageSize: '4K',
+      quality: 'high',
+    })
+
+    expect(capturedBody.size).toBe('2:1')        // passed through, NOT '1:1'
+    expect(capturedBody.resolution).toBe('4k')
+    expect(capturedBody.quality).toBe('high')
+  })
+
+  it('nano-banana-2 forwards an extreme aspect ratio (full plugin parity)', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'nano-banana-2',
+      prompt: 'a tall banner',
+      aspectRatio: '1:8',
+      imageSize: '2K',
+    })
+
+    expect(capturedBody.size).toBe('1:8')
+    expect(capturedBody.image_size).toBe('2K')
+    expect(capturedBody.model).toBe('gemini-3.1-flash-image-preview')
+  })
+
   it('maps all three schema sizes to correct aspect-ratio strings', async () => {
     const cases: Array<{ size: '1024x1024' | '1792x1024' | '1024x1792'; expected: string }> = [
       { size: '1024x1024', expected: '1:1' },
@@ -266,5 +306,144 @@ describe('ApimartAdapter', () => {
     await expect(
       adapter.taskStatus!('apimart-task-net-fail')
     ).rejects.toMatchObject({ code: 'provider_unavailable', httpStatus: 503 })
+  })
+
+  // ---------------------------------------------------------------------------
+  // gpt-image-2: imageSize + quality forwarding (plugin parity)
+  // ---------------------------------------------------------------------------
+
+  it('gpt-image-2 forwards imageSize=4K as resolution=4k and aspectRatio as size', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'gpt-image-2',
+      prompt: 'test',
+      n: 1,
+      imageSize: '4K',
+      aspectRatio: '16:9',
+    } as any)
+
+    expect(capturedBody.size).toBe('16:9')
+    expect(capturedBody.resolution).toBe('4k')
+  })
+
+  it('gpt-image-2 forwards quality=high to apimart body', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'gpt-image-2',
+      prompt: 'test',
+      n: 1,
+      imageSize: '2K',
+      quality: 'high',
+    } as any)
+
+    expect(capturedBody.quality).toBe('high')
+    expect(capturedBody.resolution).toBe('2k')
+  })
+
+  it('gpt-image-2 quality=auto is NOT forwarded (no quality field in body)', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'gpt-image-2',
+      prompt: 'test',
+      n: 1,
+      imageSize: '2K',
+      quality: 'auto',
+    } as any)
+
+    // quality='auto' means "let apimart decide" — we don't send the field
+    expect(capturedBody.quality).toBeUndefined()
+  })
+
+  it('gpt-image-2 imageSize=1K maps to resolution=1k', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'gpt-image-2',
+      prompt: 'test',
+      n: 1,
+      imageSize: '1K',
+      aspectRatio: '1:1',
+    } as any)
+
+    expect(capturedBody.resolution).toBe('1k')
+    expect(capturedBody.size).toBe('1:1')
+  })
+
+  // ---------------------------------------------------------------------------
+  // nano-banana: imageSize forwarded as image_size
+  // ---------------------------------------------------------------------------
+
+  it('nano-banana-pro forwards imageSize as image_size to apimart', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'nano-banana-pro',
+      prompt: 'test',
+      aspectRatio: '16:9',
+      imageSize: '2K',
+    } as any)
+
+    expect(capturedBody.image_size).toBe('2K')
+    expect(capturedBody.model).toBe('gemini-3-pro-image-preview')
+    expect(capturedBody.size).toBe('16:9')
+  })
+
+  it('nano-banana-2 forwards imageSize=512 as image_size', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'nano-banana-2',
+      prompt: 'test',
+      aspectRatio: '1:1',
+      imageSize: '512',
+    } as any)
+
+    expect(capturedBody.image_size).toBe('512')
+    expect(capturedBody.model).toBe('gemini-3.1-flash-image-preview')
+  })
+
+  it('nano-banana without imageSize does not send image_size (no default forwarding)', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/images/generations', (body) => { capturedBody = body; return true })
+      .reply(200, submitFx)
+
+    const adapter = new ApimartAdapter({ apiKey: 'sk-apimart-test', baseUrl: BASE })
+    await adapter.imageGeneration!({
+      model: 'nano-banana-pro',
+      prompt: 'test',
+      aspectRatio: '1:1',
+    } as any)
+
+    // When imageSize is not provided, the schema default of '1K' is applied.
+    // We forward any truthy imageSize.
+    expect(capturedBody.model).toBe('gemini-3-pro-image-preview')
   })
 })

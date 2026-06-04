@@ -359,4 +359,101 @@ describe('VideosGenerationsBody', () => {
       model: 'veo-3.1-lite', prompt: 'x', aspectRatio: '16:9', mode: 'first-last-frame',
     })).toThrow()
   })
+
+  // ---------------------------------------------------------------------------
+  // happyhorse-1.0-t2v / happyhorse-1.0-i2v — no params; t2v: no assets;
+  // i2v: 1 optional input_asset (first frame). Plugin: src/models/happyhorse.ts.
+  // ---------------------------------------------------------------------------
+
+  it('happyhorse-1.0-t2v parses with prompt only (no params, no assets)', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'happyhorse-1.0-t2v',
+      prompt: 'a horse galloping',
+    })
+    expect(r.model).toBe('happyhorse-1.0-t2v')
+    expect((r as any).input_assets).toBeUndefined()
+  })
+
+  it('happyhorse-1.0-i2v parses with 1 input_asset', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'happyhorse-1.0-i2v',
+      prompt: 'animate this frame',
+      input_assets: ['ast_img1'],
+    })
+    expect(r.model).toBe('happyhorse-1.0-i2v')
+    expect((r as any).input_assets).toEqual(['ast_img1'])
+  })
+
+  it('happyhorse-1.0-i2v parses without input_assets (optional)', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'happyhorse-1.0-i2v',
+      prompt: 'animate',
+    })
+    expect(r.model).toBe('happyhorse-1.0-i2v')
+    expect((r as any).input_assets).toBeUndefined()
+  })
+
+  it('happyhorse-1.0-i2v rejects more than 1 input_asset', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'happyhorse-1.0-i2v',
+      prompt: 'animate',
+      input_assets: ['ast_a', 'ast_b'],
+    })).toThrow()
+  })
+
+  // ---------------------------------------------------------------------------
+  // luma-uni-1 — REMOVED from video schema (moved to image schema)
+  // ---------------------------------------------------------------------------
+  it('luma-uni-1 is NO LONGER accepted by the videos schema (moved to images)', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'luma-uni-1', prompt: 'a sunset', aspectRatio: '16:9',
+    })).toThrow()
+  })
+
+  // ---------------------------------------------------------------------------
+  // kling-2.6 / kling-3.0 — mode (std/pro) parity with plugin KLING_PARAMS
+  // ---------------------------------------------------------------------------
+
+  it('kling-3.0 mode defaults to std', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'kling-3.0', prompt: 'cat walks', aspectRatio: '16:9',
+    })
+    expect((r as any).mode).toBe('std')
+  })
+
+  it('kling-2.6 mode defaults to std', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'kling-2.6', prompt: 'cat walks', aspectRatio: '9:16',
+    })
+    expect((r as any).mode).toBe('std')
+  })
+
+  it('kling-3.0 accepts mode=pro', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'kling-3.0', prompt: 'cat walks', aspectRatio: '16:9', mode: 'pro',
+    })
+    expect((r as any).mode).toBe('pro')
+  })
+
+  it('kling-3.0 accepts mode=std explicitly', () => {
+    const r = VideosGenerationsBody.parse({
+      model: 'kling-3.0', prompt: 'cat walks', aspectRatio: '16:9', mode: 'std',
+    })
+    expect((r as any).mode).toBe('std')
+  })
+
+  it('kling-3.0 rejects invalid mode value', () => {
+    expect(() => VideosGenerationsBody.parse({
+      model: 'kling-3.0', prompt: 'cat walks', aspectRatio: '16:9', mode: 'ultra',
+    })).toThrow()
+  })
+
+  it('kling-2.6 accepts both mode values (std/pro)', () => {
+    for (const mode of ['std', 'pro'] as const) {
+      const r = VideosGenerationsBody.parse({
+        model: 'kling-2.6', prompt: 'cat walks', aspectRatio: '16:9', mode,
+      })
+      expect((r as any).mode).toBe(mode)
+    }
+  })
 })

@@ -24,17 +24,25 @@ const REGISTRY: Record<string, RegistryEntry> = {
   'kling-2.6':          { provider: 'fal',         capability: 'video', async: true },
   'kling-3.0':          { provider: 'fal',         capability: 'video', async: true },
   'grok-video':         { provider: 'xai',         capability: 'video', async: true },  // xai native (POST /v1/videos/generations) ✓ was fal
-  'seedance-2.0':       { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter (OpenAI Videos API); byteplus available as fallback
-  'seedance-2.0-fast':  { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter; byteplus available as fallback
+  'seedance-2.0':           { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter (OpenAI Videos API); byteplus available as fallback
+  'seedance-2.0-fast':      { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter; byteplus available as fallback
+  'happyhorse-1.0-t2v':     { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter /video/generations; no params
+  'happyhorse-1.0-i2v':     { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter /video/generations; first-frame
   'veo-3.1':            { provider: 'gemini',      capability: 'video', async: true },
   'veo-3.1-lite':       { provider: 'gemini',      capability: 'video', async: true },
-  'luma-uni-1':         { provider: 'luma',        capability: 'video', async: true },
+  'luma-uni-1':         { provider: 'luma',        capability: 'image', async: false },
 
   // text — gpt-5.5-pro, gemini-3-flash, gemini-3.1-pro now via tokenrouter
   'gemini-3-flash':     { provider: 'tokenrouter', capability: 'text', async: false },
   'gemini-3.1-pro':     { provider: 'tokenrouter', capability: 'text', async: false },
   'gpt-5.5-pro':        { provider: 'tokenrouter', capability: 'text', async: false },
   'qwen-3-6-plus':      { provider: 'tokenrouter', capability: 'text', async: false },
+  'gpt-5.5':            { provider: 'tokenrouter', capability: 'text', async: false },
+  'gemini-3.5-flash':   { provider: 'tokenrouter', capability: 'text', async: false },
+  'claude-opus-4-7':    { provider: 'tokenrouter', capability: 'text', async: false },
+  'claude-sonnet-4-6':  { provider: 'tokenrouter', capability: 'text', async: false },
+  'grok-4-3':           { provider: 'tokenrouter', capability: 'text', async: false },
+  'grok-4-fast':        { provider: 'tokenrouter', capability: 'text', async: false },
 
   // audio — all elevenlabs models → direct ElevenLabs native (paid key confirmed 2026-05-27)
   //         elevenlabs-music: paid plan required (200 bytes confirmed with new key)
@@ -42,6 +50,9 @@ const REGISTRY: Record<string, RegistryEntry> = {
   'elevenlabs-tts-v3':  { provider: 'elevenlabs',  capability: 'audio', async: false },
   'elevenlabs-music':   { provider: 'elevenlabs',  capability: 'audio', async: false },
   'elevenlabs-sfx':     { provider: 'elevenlabs',  capability: 'audio', async: false },
+  // minimax audio via fal queue (async — fal submit → poll → audio URL)
+  'minimax-tts':        { provider: 'fal',         capability: 'audio', async: true  },
+  'minimax-music':      { provider: 'fal',         capability: 'audio', async: true  },
 }
 
 /**
@@ -61,8 +72,10 @@ export const MODEL_PROVIDER_OPTIONS: Record<string, Set<Provider>> = {
   'kling-2.6':          new Set(['fal']),
   'kling-3.0':          new Set(['fal']),
   'grok-video':         new Set(['xai']),
-  'seedance-2.0':       new Set(['tokenrouter', 'byteplus']),
-  'seedance-2.0-fast':  new Set(['tokenrouter', 'byteplus']),
+  'seedance-2.0':           new Set(['tokenrouter', 'byteplus']),
+  'seedance-2.0-fast':      new Set(['tokenrouter', 'byteplus']),
+  'happyhorse-1.0-t2v':     new Set(['tokenrouter']),
+  'happyhorse-1.0-i2v':     new Set(['tokenrouter']),
   'veo-3.1':            new Set(['gemini']),
   'veo-3.1-lite':       new Set(['gemini']),
   'luma-uni-1':         new Set(['luma']),
@@ -70,10 +83,18 @@ export const MODEL_PROVIDER_OPTIONS: Record<string, Set<Provider>> = {
   'gemini-3.1-pro':     new Set(['tokenrouter']),
   'gpt-5.5-pro':        new Set(['tokenrouter']),
   'qwen-3-6-plus':      new Set(['tokenrouter']),
+  'gpt-5.5':            new Set(['tokenrouter', 'openai']),
+  'gemini-3.5-flash':   new Set(['tokenrouter', 'gemini']),
+  'claude-opus-4-7':    new Set(['tokenrouter']),
+  'claude-sonnet-4-6':  new Set(['tokenrouter']),
+  'grok-4-3':           new Set(['tokenrouter']),
+  'grok-4-fast':        new Set(['tokenrouter']),
   'grok-tts':           new Set(['xai']),
   'elevenlabs-tts-v3':  new Set(['elevenlabs', 'fal']),
   'elevenlabs-music':   new Set(['elevenlabs', 'fal']),
   'elevenlabs-sfx':     new Set(['elevenlabs', 'fal']),
+  'minimax-tts':        new Set(['fal']),
+  'minimax-music':      new Set(['fal']),
 }
 
 export function lookupModel(modelId: string): RegistryEntry | undefined {

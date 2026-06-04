@@ -12,7 +12,7 @@ const ASYNC_PROVIDERS = new Set<Provider>([
   'gemini',       // Veo video
   'byteplus',     // Seedance video (fallback)
   'fal',          // Kling, ElevenLabs, nano-banana
-  'luma',         // video
+  // luma is now sync image (luma-uni-1 moved video→image in V2); no async tasks.
   'legnext',      // Midjourney (returns 501 in V1)
   'apimart',      // gpt-image-2
   'xai',          // grok-video (native video API)
