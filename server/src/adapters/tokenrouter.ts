@@ -7,16 +7,25 @@
  * Supported models:
  *   Chat (sync):   qwen-3-6-plus, gpt-5.5-pro, gpt-5.5, gemini-3.1-pro, gemini-3-flash,
  *                  gemini-3.5-flash, claude-opus-4-7, claude-sonnet-4-6, grok-4-3, grok-4-fast
- *   Video (async): seedance-2.0  → dreamina-seedance-2-0-260128
+ *   Video (async): seedance-2.0      → dreamina-seedance-2-0-260128
  *                  seedance-2.0-fast → dreamina-seedance-2-0-fast-260128
+ *                  happyhorse-1.0-t2v → happyhorse-1.0-t2v (upstream id passed as-is)
+ *                  happyhorse-1.0-i2v → happyhorse-1.0-i2v (upstream id passed as-is)
  *
  * Auth: Authorization: Bearer ${TOKENROUTER_API_KEY}
  * Base: https://api.tokenrouter.com/v1
  *
- * Video API (OpenAI Videos pattern):
+ * Seedance Video API (OpenAI Videos pattern):
  *   POST /v1/videos  { model, prompt, size, seconds }  → { task_id }
  *   GET  /v1/videos/{id}  → { status, metadata: { url } }
  *   status values: "pending" | "running" | "completed" | "failed"
+ *
+ * HappyHorse Video API (custom /video/generations path):
+ *   POST /v1/video/generations  { model, prompt, metadata: { source, input_mode, attachment_count }, first_frame_image? }
+ *   → { task_id }
+ *   GET  /v1/video/generations/{id}  → { status, metadata: { url } }
+ *   status values: same shape as seedance (pending/running/in_progress/completed/failed)
+ *   provider_task_id is prefixed "hh:" so taskStatus can route to the correct poll endpoint.
  */
 
 import type { Adapter, SyncResult, AsyncResult, TaskStatusResult } from './types.js'
@@ -28,6 +37,13 @@ import { materializeAsset } from './materialize-asset.js'
 const BASE = 'https://api.tokenrouter.com/v1'
 
 const SEEDANCE_POLL_AFTER_MS = 8_000
+const HAPPYHORSE_POLL_AFTER_MS = 8_000
+
+/**
+ * Prefix added to provider_task_id for HappyHorse tasks so taskStatus can
+ * route the GET poll to /video/generations/{id} instead of /videos/{id}.
+ */
+const HH_TASK_PREFIX = 'hh:'
 
 /**
  * Map our chat model IDs to Tokenrouter upstream model names.
@@ -142,8 +158,14 @@ export class TokenrouterAdapter implements Adapter {
   }
 
   async videoGeneration(
-    req: Extract<VideosGenerationsRequest, { model: 'seedance-2.0' | 'seedance-2.0-fast' }>,
+    req: Extract<VideosGenerationsRequest, { model: 'seedance-2.0' | 'seedance-2.0-fast' | 'happyhorse-1.0-t2v' | 'happyhorse-1.0-i2v' }>,
   ): Promise<AsyncResult> {
+    // --- HappyHorse branch ---
+    if (req.model === 'happyhorse-1.0-t2v' || req.model === 'happyhorse-1.0-i2v') {
+      return this.happyHorseVideoGeneration(req)
+    }
+
+    // --- Seedance branch (unchanged) ---
     const upstreamModel = VIDEO_MODEL_MAP[req.model] ?? req.model
     const size = seedanceSize(req)
     // tokenrouter Videos API: seconds is a string (per their Go struct definition)
@@ -181,9 +203,65 @@ export class TokenrouterAdapter implements Adapter {
     }
   }
 
+  /**
+   * HappyHorse video generation.
+   * Replicates the plugin's applyHappyHorseMedia wire shape (src/providers/tokenrouter.ts).
+   * Endpoint: POST /v1/video/generations (distinct from seedance's /v1/videos).
+   * Body: { model, prompt, metadata: { source, input_mode, attachment_count }, first_frame_image? }
+   * The task_id is prefixed with HH_TASK_PREFIX so taskStatus routes the poll
+   * to /v1/video/generations/{id} rather than /v1/videos/{id}.
+   */
+  private async happyHorseVideoGeneration(
+    req: Extract<VideosGenerationsRequest, { model: 'happyhorse-1.0-t2v' | 'happyhorse-1.0-i2v' }>,
+  ): Promise<AsyncResult> {
+    const isI2V = req.model === 'happyhorse-1.0-i2v'
+    const inputMode = isI2V ? 'first-frame' : 'text-to-video'
+
+    const body: Record<string, unknown> = {
+      model: req.model,
+      prompt: req.prompt,
+      // metadata mirrors plugin's !isSeedance branch in generateVideo
+      metadata: {
+        source: 'bragi-canvas',
+        input_mode: inputMode,
+        attachment_count: isI2V ? 1 : 0,
+      },
+    }
+
+    if (isI2V) {
+      const assets = (req as { input_assets?: string[] }).input_assets
+      if (!assets || assets.length === 0) {
+        throw new ApiError(
+          'invalid_request',
+          'happyhorse-1.0-i2v requires one input_asset (first frame)',
+          400,
+        )
+      }
+      const m = await materializeAsset(assets[0], 'url')
+      // ASSUMPTION: HappyHorse i2v accepts first_frame_image as a URL,
+      // matching the plugin's applyHappyHorseMedia body.first_frame_image = imageUrls[0].
+      body.first_frame_image = m.url
+    }
+
+    const r: any = await this.callJson('POST', '/video/generations', body)
+
+    return {
+      status: 'queued',
+      provider: 'tokenrouter',
+      // Prefix with HH_TASK_PREFIX so taskStatus routes to /video/generations/{id}
+      provider_task_id: HH_TASK_PREFIX + (r.task_id as string),
+      poll_after_ms: HAPPYHORSE_POLL_AFTER_MS,
+    }
+  }
+
   async taskStatus(taskId: string): Promise<TaskStatusResult> {
     const t0 = Date.now()
-    const r: any = await this.callJson('GET', `/videos/${taskId}`)
+    // Route HappyHorse tasks to /video/generations/{id}; seedance tasks to /videos/{id}.
+    // The HH_TASK_PREFIX is stripped before sending upstream.
+    const isHH = taskId.startsWith(HH_TASK_PREFIX)
+    const upstreamId = isHH ? taskId.slice(HH_TASK_PREFIX.length) : taskId
+    const pollPath = isHH ? `/video/generations/${upstreamId}` : `/videos/${upstreamId}`
+    const r: any = await this.callJson('GET', pollPath)
 
     const status: string = r.status ?? 'unknown'
 
@@ -197,7 +275,7 @@ export class TokenrouterAdapter implements Adapter {
     }
 
     if (status === 'pending' || status === 'running' || status === 'in_progress') {
-      return { status: 'running', latency_ms: Date.now() - t0, poll_after_ms: SEEDANCE_POLL_AFTER_MS }
+      return { status: 'running', latency_ms: Date.now() - t0, poll_after_ms: isHH ? HAPPYHORSE_POLL_AFTER_MS : SEEDANCE_POLL_AFTER_MS }
     }
 
     // failed or unknown

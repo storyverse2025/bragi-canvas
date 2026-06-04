@@ -1,0 +1,9 @@
+{
+  "task_id": "hh-video-task-xyz789",
+  "status": "completed",
+  "model": "happyhorse-1.0-t2v",
+  "metadata": {
+    "url": "https://cdn.tokenrouter.com/videos/happyhorse-result-xyz789.mp4",
+    "duration": 5
+  }
+}

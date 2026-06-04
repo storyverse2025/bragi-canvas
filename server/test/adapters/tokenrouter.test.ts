@@ -9,6 +9,8 @@ import videoCreatedFx from '../fixtures/tokenrouter/video-task-created.json' wit
 import videoRunningFx from '../fixtures/tokenrouter/video-task-running.json' with { type: 'json' }
 import videoCompletedFx from '../fixtures/tokenrouter/video-task-completed.json' with { type: 'json' }
 import videoFailedFx from '../fixtures/tokenrouter/video-task-failed.json' with { type: 'json' }
+import hhTaskCreatedFx from '../fixtures/tokenrouter/hh-task-created.json' with { type: 'json' }
+import hhTaskCompletedFx from '../fixtures/tokenrouter/hh-task-completed.json' with { type: 'json' }
 import { TokenrouterAdapter } from '../../src/adapters/tokenrouter.js'
 import { storeAsset } from '../../src/assets.js'
 
@@ -319,6 +321,140 @@ describe('TokenrouterAdapter videoGeneration', () => {
     })
 
     expect(capturedBody.size).toBe('854x480')
+  })
+})
+
+describe('TokenrouterAdapter videoGeneration — happyhorse', () => {
+  it('happyhorse-1.0-t2v posts to /v1/video/generations with t2v body shape', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/video/generations', (body) => { capturedBody = body; return true })
+      .reply(200, hhTaskCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'happyhorse-1.0-t2v',
+      prompt: 'a horse galloping through meadow',
+    } as any)
+
+    expect(result.status).toBe('queued')
+    expect(result.provider).toBe('tokenrouter')
+    // provider_task_id should be prefixed with 'hh:' for correct poll routing
+    expect(result.provider_task_id).toBe('hh:hh-video-task-xyz789')
+    expect(result.poll_after_ms).toBeGreaterThan(0)
+    // Wire shape matches plugin's applyHappyHorseMedia / generateVideo
+    expect(capturedBody.model).toBe('happyhorse-1.0-t2v')
+    expect(capturedBody.prompt).toBe('a horse galloping through meadow')
+    expect(capturedBody.metadata).toBeDefined()
+    expect(capturedBody.metadata.input_mode).toBe('text-to-video')
+    expect(capturedBody.metadata.source).toBe('bragi-canvas')
+    expect(capturedBody.metadata.attachment_count).toBe(0)
+    // t2v must NOT include first_frame_image
+    expect(capturedBody.first_frame_image).toBeUndefined()
+    // must NOT post to /videos (seedance path)
+  })
+
+  it('happyhorse-1.0-i2v posts to /v1/video/generations with first_frame_image', async () => {
+    let capturedBody: any
+    nock(BASE)
+      .post('/v1/video/generations', (body) => { capturedBody = body; return true })
+      .reply(200, hhTaskCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'happyhorse-1.0-i2v',
+      prompt: 'animate this frame',
+      input_assets: ['ast_img1'],
+    } as any)
+
+    expect(result.status).toBe('queued')
+    expect(result.provider_task_id).toBe('hh:hh-video-task-xyz789')
+    expect(capturedBody.model).toBe('happyhorse-1.0-i2v')
+    expect(capturedBody.metadata.input_mode).toBe('first-frame')
+    expect(capturedBody.metadata.attachment_count).toBe(1)
+    // first_frame_image must be a signed URL for the materialized asset
+    expect(capturedBody.first_frame_image).toMatch(/^https:\/\/router\.test\/v1\/assets\/ast_img1\?expires=/)
+  })
+
+  it('happyhorse-1.0-i2v throws 400 when no input_asset is provided', async () => {
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await expect(
+      adapter.videoGeneration!({ model: 'happyhorse-1.0-i2v', prompt: 'x' } as any)
+    ).rejects.toMatchObject({ code: 'invalid_request', httpStatus: 400 })
+  })
+
+  it('happyhorse does NOT post to /v1/videos (regression guard: seedance path untouched)', async () => {
+    let seedanceCalled = false
+    nock(BASE)
+      .post('/v1/videos', () => { seedanceCalled = true; return true })
+      .reply(200, videoCreatedFx)
+    nock(BASE)
+      .post('/v1/video/generations')
+      .reply(200, hhTaskCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    await adapter.videoGeneration!({
+      model: 'happyhorse-1.0-t2v',
+      prompt: 'test',
+    } as any)
+
+    expect(seedanceCalled).toBe(false)
+  })
+
+  it('seedance still posts to /v1/videos (regression guard: happyhorse path does not break seedance)', async () => {
+    let seedancePath = ''
+    nock(BASE)
+      .post('/v1/videos', () => true)
+      .reply(200, videoCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.videoGeneration!({
+      model: 'seedance-2.0',
+      prompt: 'a cat walking',
+      ratio: '16:9',
+      duration: '5',
+    })
+
+    // Seedance result should NOT have the hh: prefix
+    expect(result.provider_task_id).toBe('tr-video-task-abc123')
+    expect(result.provider_task_id).not.toMatch(/^hh:/)
+  })
+})
+
+describe('TokenrouterAdapter taskStatus — happyhorse poll routing', () => {
+  it('hh:-prefixed taskId polls /v1/video/generations/{id} (not /v1/videos)', async () => {
+    nock(BASE)
+      .get('/v1/video/generations/hh-video-task-xyz789')
+      .reply(200, hhTaskCreatedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.taskStatus!('hh:hh-video-task-xyz789')
+    expect(result.status).toBe('running')
+    expect(result.poll_after_ms).toBeGreaterThan(0)
+  })
+
+  it('hh: task completed returns succeeded with video URL', async () => {
+    nock(BASE)
+      .get('/v1/video/generations/hh-video-task-xyz789')
+      .reply(200, hhTaskCompletedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.taskStatus!('hh:hh-video-task-xyz789')
+    expect(result.status).toBe('succeeded')
+    expect(result.outputs).toHaveLength(1)
+    expect(result.outputs![0].kind).toBe('video')
+    expect(result.outputs![0].url).toBe('https://cdn.tokenrouter.com/videos/happyhorse-result-xyz789.mp4')
+  })
+
+  it('non-hh taskId still polls /v1/videos/{id} (seedance path unchanged)', async () => {
+    nock(BASE)
+      .get('/v1/videos/tr-video-task-abc123')
+      .reply(200, videoCompletedFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.taskStatus!('tr-video-task-abc123')
+    expect(result.status).toBe('succeeded')
+    expect(result.outputs![0].url).toBe('https://cdn.tokenrouter.com/videos/seedance-result-abc123.mp4')
   })
 })
 

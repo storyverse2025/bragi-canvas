@@ -80,6 +80,19 @@ export const VideosGenerationsBody = z.discriminatedUnion('model', [
     durationSeconds: z.number().int().min(2).max(15).optional(),
     resolution: z.enum(['720p', '1080p']).optional(),
   }),
+  // happyhorse-1.0-t2v: text-to-video, no params. Upstream model id is used as-is.
+  // Plugin ground truth: bragi-canvas-plugin/src/models/happyhorse.ts (params: []).
+  z.object({
+    model: z.literal('happyhorse-1.0-t2v'),
+    prompt: z.string().min(1),
+  }),
+  // happyhorse-1.0-i2v: first-frame (image-to-video), 1 image asset required.
+  // Plugin ground truth: bragi-canvas-plugin/src/models/happyhorse.ts (params: []).
+  z.object({
+    model: z.literal('happyhorse-1.0-i2v'),
+    prompt: z.string().min(1),
+    input_assets: z.array(z.string()).max(1).optional(),
+  }),
   // veo-3.1-lite: only text-to-video or first-frame (1 asset max) per plugin's
   // INPUT_ASSETS_MAX table. image-ref / first-last-frame are not supported.
   // `mode` is optional — omit to use inference (back-compat).

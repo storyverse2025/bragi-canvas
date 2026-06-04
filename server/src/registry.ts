@@ -24,8 +24,10 @@ const REGISTRY: Record<string, RegistryEntry> = {
   'kling-2.6':          { provider: 'fal',         capability: 'video', async: true },
   'kling-3.0':          { provider: 'fal',         capability: 'video', async: true },
   'grok-video':         { provider: 'xai',         capability: 'video', async: true },  // xai native (POST /v1/videos/generations) ✓ was fal
-  'seedance-2.0':       { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter (OpenAI Videos API); byteplus available as fallback
-  'seedance-2.0-fast':  { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter; byteplus available as fallback
+  'seedance-2.0':           { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter (OpenAI Videos API); byteplus available as fallback
+  'seedance-2.0-fast':      { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter; byteplus available as fallback
+  'happyhorse-1.0-t2v':     { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter /video/generations; no params
+  'happyhorse-1.0-i2v':     { provider: 'tokenrouter', capability: 'video', async: true },  // tokenrouter /video/generations; first-frame
   'veo-3.1':            { provider: 'gemini',      capability: 'video', async: true },
   'veo-3.1-lite':       { provider: 'gemini',      capability: 'video', async: true },
   'luma-uni-1':         { provider: 'luma',        capability: 'image', async: false },
@@ -67,8 +69,10 @@ export const MODEL_PROVIDER_OPTIONS: Record<string, Set<Provider>> = {
   'kling-2.6':          new Set(['fal']),
   'kling-3.0':          new Set(['fal']),
   'grok-video':         new Set(['xai']),
-  'seedance-2.0':       new Set(['tokenrouter', 'byteplus']),
-  'seedance-2.0-fast':  new Set(['tokenrouter', 'byteplus']),
+  'seedance-2.0':           new Set(['tokenrouter', 'byteplus']),
+  'seedance-2.0-fast':      new Set(['tokenrouter', 'byteplus']),
+  'happyhorse-1.0-t2v':     new Set(['tokenrouter']),
+  'happyhorse-1.0-i2v':     new Set(['tokenrouter']),
   'veo-3.1':            new Set(['gemini']),
   'veo-3.1-lite':       new Set(['gemini']),
   'luma-uni-1':         new Set(['luma']),
