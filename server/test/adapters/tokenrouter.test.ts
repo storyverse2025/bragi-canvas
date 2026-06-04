@@ -100,6 +100,65 @@ describe('TokenrouterAdapter', () => {
     expect(capturedBody.model).toBe('google/gemini-3-flash-preview')
   })
 
+  it('chatCompletion claude-opus-4-7 maps to anthropic/claude-opus-4.7', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/chat/completions', (body) => { capturedBody = body; return true })
+      .reply(200, chatFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.chatCompletion!({
+      model: 'claude-opus-4-7',
+      messages: [{ role: 'user', content: 'Hello' }],
+    })
+
+    expect(result.status).toBe('succeeded')
+    expect(capturedBody.model).toBe('anthropic/claude-opus-4.7')
+    expect(result.model).toBe('claude-opus-4-7')
+    expect(result.outputs[0].text).toBeDefined()
+  })
+
+  it('chatCompletion grok-4-3 maps to x-ai/grok-4.3', async () => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/chat/completions', (body) => { capturedBody = body; return true })
+      .reply(200, chatFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.chatCompletion!({
+      model: 'grok-4-3',
+      messages: [{ role: 'user', content: 'Hello' }],
+    })
+
+    expect(result.status).toBe('succeeded')
+    expect(capturedBody.model).toBe('x-ai/grok-4.3')
+    expect(result.model).toBe('grok-4-3')
+    expect(result.outputs[0].text).toBeDefined()
+  })
+
+  // Lock the remaining 4 new-model id mappings (id typos are the key risk).
+  it.each([
+    ['gpt-5.5', 'openai/gpt-5.5'],
+    ['gemini-3.5-flash', 'google/gemini-3.5-flash'],
+    ['claude-sonnet-4-6', 'anthropic/claude-sonnet-4.6'],
+    ['grok-4-fast', 'x-ai/grok-4.1-fast'],
+  ])('chatCompletion %s maps to %s', async (model, upstream) => {
+    let capturedBody: any = null
+    nock(BASE)
+      .post('/v1/chat/completions', (body) => { capturedBody = body; return true })
+      .reply(200, chatFx)
+
+    const adapter = new TokenrouterAdapter('sk-tokenrouter-test-key')
+    const result = await adapter.chatCompletion!({
+      model: model as any,
+      messages: [{ role: 'user', content: 'Hello' }],
+    })
+
+    expect(result.status).toBe('succeeded')
+    expect(capturedBody.model).toBe(upstream)
+    expect(result.model).toBe(model)
+  })
+
   it('4xx error maps to provider_invalid_request', async () => {
     nock(BASE)
       .post('/v1/chat/completions')

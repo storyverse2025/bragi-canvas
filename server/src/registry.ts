@@ -35,6 +35,12 @@ const REGISTRY: Record<string, RegistryEntry> = {
   'gemini-3.1-pro':     { provider: 'tokenrouter', capability: 'text', async: false },
   'gpt-5.5-pro':        { provider: 'tokenrouter', capability: 'text', async: false },
   'qwen-3-6-plus':      { provider: 'tokenrouter', capability: 'text', async: false },
+  'gpt-5.5':            { provider: 'tokenrouter', capability: 'text', async: false },
+  'gemini-3.5-flash':   { provider: 'tokenrouter', capability: 'text', async: false },
+  'claude-opus-4-7':    { provider: 'tokenrouter', capability: 'text', async: false },
+  'claude-sonnet-4-6':  { provider: 'tokenrouter', capability: 'text', async: false },
+  'grok-4-3':           { provider: 'tokenrouter', capability: 'text', async: false },
+  'grok-4-fast':        { provider: 'tokenrouter', capability: 'text', async: false },
 
   // audio — all elevenlabs models → direct ElevenLabs native (paid key confirmed 2026-05-27)
   //         elevenlabs-music: paid plan required (200 bytes confirmed with new key)
@@ -70,6 +76,12 @@ export const MODEL_PROVIDER_OPTIONS: Record<string, Set<Provider>> = {
   'gemini-3.1-pro':     new Set(['tokenrouter']),
   'gpt-5.5-pro':        new Set(['tokenrouter']),
   'qwen-3-6-plus':      new Set(['tokenrouter']),
+  'gpt-5.5':            new Set(['tokenrouter', 'openai']),
+  'gemini-3.5-flash':   new Set(['tokenrouter', 'gemini']),
+  'claude-opus-4-7':    new Set(['tokenrouter']),
+  'claude-sonnet-4-6':  new Set(['tokenrouter']),
+  'grok-4-3':           new Set(['tokenrouter']),
+  'grok-4-fast':        new Set(['tokenrouter']),
   'grok-tts':           new Set(['xai']),
   'elevenlabs-tts-v3':  new Set(['elevenlabs', 'fal']),
   'elevenlabs-music':   new Set(['elevenlabs', 'fal']),
