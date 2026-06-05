@@ -9,6 +9,7 @@ import { getModelById, getActiveProvider, getEnabledModels } from './models/inde
 import { getTextInputCapability, listSupportedInputLabels, listUnsupportedInputLabels } from './models/text-input-capabilities'
 import { getConfiguredProviderIds } from './providers/registry'
 import type { GenerationType, Mode } from './models/types'
+import { STORYVERSE_NOOP_PARAMS, STORYVERSE_UNSUPPORTED_MODES } from './providers/storyverse'
 import { getUpstreamInputs } from './edge-parser'
 import { getOrderedTextRefs } from './text-refs'
 import { getOrderedImages } from './ref-thumbnails'
@@ -440,17 +441,24 @@ export function createMcpToolRegistry(ctx: McpToolContext): McpToolDef[] {
 						const capability = m.type === 'text'
 							? getTextInputCapability(m.id, provider, apiModelId)
 							: null
+						// Mirror panel's storyverse-specific carve-outs so an MCP client can't
+						// pick a mode/param that the V1 router schema would silently drop or
+						// reject.
+						const noOpParams = provider === 'storyverse' ? (STORYVERSE_NOOP_PARAMS[m.id] || []) : []
+						const unsupportedModes = provider === 'storyverse' ? (STORYVERSE_UNSUPPORTED_MODES[m.id] || []) : []
+						const visibleModes = m.modes.filter(x => !unsupportedModes.includes(x))
+						const visibleParams = m.params.filter(p => !noOpParams.includes(p.id))
 						result.push({
 							id: m.id,
 							name: m.name,
 							type: m.type,
 							provider,
-							modes: m.modes,
+							modes: visibleModes,
 							...(capability ? {
 								supportedInputs: listSupportedInputLabels(capability),
 								unsupportedInputs: listUnsupportedInputLabels(capability),
 							} : {}),
-							params: m.params.map(p => ({
+							params: visibleParams.map(p => ({
 								id: p.id,
 								label: p.label,
 								type: p.type,
@@ -527,13 +535,40 @@ export function createMcpToolRegistry(ctx: McpToolContext): McpToolDef[] {
 				}
 				if (!prompt) throw new Error('Node contains no prompt text')
 
-				// Resolve params with defaults
-				const resolvedParams: Record<string, string | number> = { ...(params || {}) }
-				for (const p of model.params) {
-					resolvedParams[p.id] = resolvedParams[p.id] ?? p.default
+				// Compute the effective mode/param surface, taking storyverse's V1 router carve-outs
+				// into account. list_models advertises this exact surface, so refusing off-surface
+				// modes/params keeps the MCP contract honest.
+				const unsupportedModes = provider === 'storyverse' ? (STORYVERSE_UNSUPPORTED_MODES[model.id] || []) : []
+				const effectiveModes = model.modes.filter(x => !unsupportedModes.includes(x))
+				if (mode && !effectiveModes.includes(mode as Mode)) {
+					const suffix = provider === 'storyverse'
+						? ' (storyverse V1 router does not implement the omitted modes)'
+						: ''
+					throw new Error(
+						`Mode "${mode}" is not supported for ${model.id}. Available: ${effectiveModes.join(', ') || '(none)'}${suffix}`,
+					)
 				}
+				const selectedMode = (mode as Mode) || effectiveModes[0] || null
 
-				const selectedMode = (mode as Mode) || model.modes[0] || null
+				// Caller-supplied params under storyverse: any value targeting a no-op param is a
+				// configuration error — the field will be silently stripped by the router otherwise.
+				// Fill defaults only for params that are actually wired up.
+				const noOpParams = provider === 'storyverse' ? (STORYVERSE_NOOP_PARAMS[model.id] || []) : []
+				const resolvedParams: Record<string, string | number> = {}
+				for (const [k, v] of Object.entries(params || {})) {
+					if (noOpParams.includes(k)) {
+						throw new Error(
+							`Parameter "${k}" is not supported for ${model.id} via storyverse (router schema does not forward it). Pick a different provider for this model or omit the param.`,
+						)
+					}
+					resolvedParams[k] = v
+				}
+				for (const p of model.params) {
+					if (noOpParams.includes(p.id)) continue
+					if (resolvedParams[p.id] === undefined) {
+						resolvedParams[p.id] = p.default
+					}
+				}
 
 				const panelResult: PanelResult = {
 					prompt,

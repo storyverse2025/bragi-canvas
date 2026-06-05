@@ -57,6 +57,9 @@ export interface BragiSettings {
 	migrationPrompted: boolean
 	/** Set to true once the 1.9.0 provider-prefs migration ran. */
 	migrationProviders_1_9: boolean
+	/** Set to true once the legacy top-level `bragiCloudUrl/bragiToken/generationMode` →
+	 *  `providers.storyverse{Url,Token}` migration ran. */
+	migrationProviders_storyverse: boolean
 
 	// Provider keys
 	providers: {
@@ -82,6 +85,8 @@ export interface BragiSettings {
 			lumaToken: string
 			xai: string
 			dashscope: string
+			storyverseUrl: string
+			storyverseToken: string
 		}
 
 	// Per-model preferences
@@ -117,6 +122,7 @@ export const DEFAULT_SETTINGS: BragiSettings = {
 	outputDir: 'assets',
 	migrationPrompted: false,
 	migrationProviders_1_9: false,
+	migrationProviders_storyverse: false,
 	providers: {
 		openai: '',
 		gemini: '',
@@ -140,6 +146,8 @@ export const DEFAULT_SETTINGS: BragiSettings = {
 			lumaToken: '',
 			xai: '',
 			dashscope: '',
+			storyverseUrl: 'https://router.storyverseai.art',
+			storyverseToken: '',
 		},
 	modelPrefs: {},
 	modelOrder: {
@@ -309,6 +317,60 @@ function normalizeDashScopeModelId(modelId: string | undefined): string | undefi
 		: modelId
 }
 
+/**
+ * One-time migration from the R1-R7 Cloud Mode shape to the standard-provider shape.
+ *
+ *  Old shape: top-level `generationMode: 'local' | 'cloud'` + `bragiCloudUrl` + `bragiToken`,
+ *  with storyverse routing implied by the mode toggle.
+ *
+ *  New shape: storyverse is just another provider — credentials live under
+ *  `providers.storyverseUrl/Token`, and a model uses it when its `modelPrefs[id].selectedProvider`
+ *  is `'storyverse'` (same as picking openai/fal/etc.).
+ *
+ * Migration: move the old URL/token across, and if the user was in Cloud Mode, flip every
+ * storyverse-capable model's selectedProvider to 'storyverse' so they keep getting the same
+ * routing they had before. Idempotent via `migrationProviders_storyverse`.
+ *
+ * `storyverseModelIds` is the list of models whose `supportedProviders` declares storyverse —
+ * passed in so this function can stay free of a model-registry import.
+ */
+export function migrateStoryverseProvider(
+	settings: BragiSettings,
+	raw: unknown,
+	storyverseModelIds: string[],
+): BragiSettings {
+	// Always strip the three legacy top-level keys, even if the migration flag is already set.
+	// `loadSettings` spreads the raw data file into `this.settings`, which carries any unknown
+	// keys (including these legacy ones) through to `saveSettings`. Deleting here means the
+	// next save call writes a clean file. Idempotent — delete on a missing key is a no-op.
+	const legacy = settings as unknown as Record<string, unknown>
+	delete legacy.generationMode
+	delete legacy.bragiCloudUrl
+	delete legacy.bragiToken
+
+	if (settings.migrationProviders_storyverse) return settings
+	const rawRec = isRecord(raw) ? raw : null
+
+	const oldUrl = typeof rawRec?.bragiCloudUrl === 'string' ? rawRec.bragiCloudUrl : ''
+	const oldToken = typeof rawRec?.bragiToken === 'string' ? rawRec.bragiToken : ''
+	const wasCloud = rawRec?.generationMode === 'cloud'
+
+	if (oldUrl && !settings.providers.storyverseUrl) settings.providers.storyverseUrl = oldUrl
+	// Always carry the token across if it exists — even if the user already typed one into
+	// the new field, the old top-level field was the live source of truth until this build.
+	if (oldToken) settings.providers.storyverseToken = oldToken
+
+	if (wasCloud) {
+		for (const modelId of storyverseModelIds) {
+			const pref = settings.modelPrefs[modelId] || { enabled: true, selectedProvider: '' }
+			settings.modelPrefs[modelId] = { ...pref, selectedProvider: 'storyverse' }
+		}
+	}
+
+	settings.migrationProviders_storyverse = true
+	return settings
+}
+
 export function migrateDashScopeSettings(settings: BragiSettings, raw?: unknown): BragiSettings {
 	const rawProviders = isRecord(raw) && isRecord(raw.providers) ? raw.providers : null
 	const legacyKey = rawProviders?.[LEGACY_DASHSCOPE_PROVIDER_ID]
@@ -360,6 +422,7 @@ function validateImportedSettings(raw: unknown): ImportValidationResult {
 	readOptionalString(raw, 'outputDir', target, errors)
 	readOptionalBoolean(raw, 'migrationPrompted', target, errors)
 	readOptionalBoolean(raw, 'migrationProviders_1_9', target, errors)
+	readOptionalBoolean(raw, 'migrationProviders_storyverse', target, errors)
 	readOptionalBoolean(raw, 'mcpEnabled', target, errors)
 	readOptionalPort(raw, 'mcpPort', target, errors)
 	readOptionalString(raw, 'mcpToken', target, errors)

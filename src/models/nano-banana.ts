@@ -25,11 +25,17 @@ export const nanoBananaPro: ModelConfig = {
 	id: 'nano-banana-pro',
 	name: 'Nano Banana Pro',
 	type: 'image',
+	// supportedProviders order matters: getActiveProvider falls back to the first entry
+	// that has a configured key when there's no explicit selectedProvider. Keep storyverse
+	// LAST so users who configured a local provider before this build keep that provider
+	// by default; the migration explicitly flips selectedProvider to storyverse for
+	// cloud-mode users, everyone else falls through to their original local choice.
 	supportedProviders: {
 		gemini: { apiModelId: 'gemini-3-pro-image-preview' },
 		fal: { apiModelId: 'fal-ai/nano-banana-pro' },
 		tokenrouter: { apiModelId: 'google/gemini-3-pro-image-preview' },
 		apimart: { apiModelId: 'gemini-3-pro-image-preview' },
+		storyverse: { apiModelId: 'nano-banana-pro' },
 	},
 	modes: ['text-to-image'],
 	params: [
@@ -63,6 +69,7 @@ export const nanoBanana2: ModelConfig = {
 		fal: { apiModelId: 'fal-ai/nano-banana-2' },
 		tokenrouter: { apiModelId: 'google/gemini-3.1-flash-image-preview' },
 		apimart: { apiModelId: 'gemini-3.1-flash-image-preview' },
+		storyverse: { apiModelId: 'nano-banana-2' },
 	},
 	modes: ['text-to-image'],
 	params: [

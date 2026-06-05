@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- Obsidian Canvas internals and provider payloads are runtime-shaped data that this plugin narrows at use sites. */
 import { Plugin, Notice, requestUrl, Menu, Modal, Setting } from 'obsidian'
-import { BragiSettings, DEFAULT_SETTINGS, BragiSettingTab, migrateDashScopeSettings, type GeneratedAssetRecord } from './settings'
+import { BragiSettings, DEFAULT_SETTINGS, BragiSettingTab, migrateDashScopeSettings, migrateStoryverseProvider, type GeneratedAssetRecord } from './settings'
 import { uploadRef } from './providers/upload'
 import { getProvider } from './providers/registry'
 import { TaskQueue, type TaskSnapshot } from './task-queue'
@@ -31,6 +31,7 @@ import { isSupportedLanguage, LanguageGateModal } from './ui/language-gate'
 import { installAlwaysNewTab } from './always-new-tab'
 import type { Canvas, CanvasNode } from './types/canvas-internal'
 import type { VoiceSourceMode } from './models/types'
+import { ALL_MODELS } from './models/index'
 import { validateTextInputs } from './models/text-input-capabilities'
 import { prepareTextInputs } from './text-input-prep'
 
@@ -936,7 +937,7 @@ export default class BragiCanvas extends Plugin {
 	async loadSettings() {
 		const raw = (await this.loadData()) || {}
 		const { _pendingTasks, ...settingsData } = raw
-		this.settings = migrateDashScopeSettings({
+		const merged: BragiSettings = {
 			...DEFAULT_SETTINGS,
 			...settingsData,
 			providers: {
@@ -949,7 +950,11 @@ export default class BragiCanvas extends Plugin {
 			},
 			knownCanvases: Array.isArray(settingsData.knownCanvases) ? settingsData.knownCanvases : [],
 			generatedAssets: Array.isArray(settingsData.generatedAssets) ? settingsData.generatedAssets : [],
-		}, raw)
+		}
+		const storyverseModelIds = ALL_MODELS
+			.filter(m => 'storyverse' in m.supportedProviders)
+			.map(m => m.id)
+		this.settings = migrateStoryverseProvider(migrateDashScopeSettings(merged, raw), raw, storyverseModelIds)
 		this.pendingTaskSnapshots = Array.isArray(_pendingTasks) ? _pendingTasks : []
 	}
 

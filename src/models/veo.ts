@@ -41,6 +41,7 @@ export const veo31: ModelConfig = {
 	supportedProviders: {
 		gemini: { apiModelId: 'veo-3.1-generate-preview' },
 		fal: { apiModelId: 'fal-ai/veo3.1' },
+		storyverse: { apiModelId: 'veo-3.1' },
 	},
 	modes: ['text-to-video', 'first-frame', 'first-last-frame', 'image-ref'],
 	params: VEO_PARAMS,
@@ -52,6 +53,7 @@ export const veo31Lite: ModelConfig = {
 	type: 'video',
 	supportedProviders: {
 		gemini: { apiModelId: 'veo-3.1-lite-generate-preview' },
+		storyverse: { apiModelId: 'veo-3.1-lite' },
 	},
 	modes: ['text-to-video', 'first-frame'],
 	params: VEO_PARAMS,

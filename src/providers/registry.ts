@@ -24,6 +24,7 @@ import { DashScopeAudioProvider } from './dashscope'
 const LUMA_ENDPOINT = 'https://luma.bragi.now'
 import { OpenAITextProvider, APIMartTextProvider, GeminiTextProvider, AnthropicTextProvider, BedrockClaudeTextProvider, XAITextProvider } from './text-gen'
 import { DashScopeTextProvider } from './dashscope-text'
+import { StoryverseImageProvider, StoryverseVideoProvider, StoryverseTextProvider, StoryverseAudioProvider } from './storyverse'
 import { requestUrl } from 'obsidian'
 
 export type ProviderKey = keyof BragiSettings['providers']
@@ -481,6 +482,32 @@ export const PROVIDERS: ProviderSpec[] = [
 			} catch (err: unknown) {
 				return { ok: false, message: `Network error: ${err?.message || err}` }
 			}
+		},
+	},
+	{
+		// Storyverse router — an AI gateway exposing many upstream models behind one svsk- token.
+		// Treated exactly like a standard multi-field provider (URL + Token) so users add it via
+		// the normal Add Provider flow and pick it per-model just like OpenAI / fal / etc.
+		id: 'storyverse',
+		name: 'Storyverse',
+		description: 'AI gateway routing to multiple upstream providers behind one svsk- token.',
+		docUrl: 'https://github.com/storyverse2025/bragi-canvas/blob/main/server/README.md',
+		fields: [
+			{ key: 'storyverseUrl',   label: 'Router URL', placeholder: 'https://...', type: 'text' },
+			{ key: 'storyverseToken', label: 'Token (svsk-...)', placeholder: 'svsk-...', type: 'password' },
+		],
+		isConfigured: (s) => !!(s.providers.storyverseUrl && s.providers.storyverseToken),
+		makeImage: ({ settings, app, outputDir }) =>
+			new StoryverseImageProvider(settings.providers.storyverseUrl, settings.providers.storyverseToken, app, outputDir),
+		makeVideo: ({ settings, app, outputDir }) =>
+			new StoryverseVideoProvider(settings.providers.storyverseUrl, settings.providers.storyverseToken, app, outputDir),
+		makeText: ({ settings, app, outputDir }) =>
+			new StoryverseTextProvider(settings.providers.storyverseUrl, settings.providers.storyverseToken, app, outputDir),
+		makeAudio: ({ settings, app, outputDir }) =>
+			new StoryverseAudioProvider(settings.providers.storyverseUrl, settings.providers.storyverseToken, app, outputDir),
+		testConnection: async (draft) => {
+			const { testStoryverseAuth } = await import('./storyverse')
+			return testStoryverseAuth(draft.storyverseUrl || '', draft.storyverseToken || '')
 		},
 	},
 ]

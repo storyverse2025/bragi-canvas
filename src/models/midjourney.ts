@@ -5,6 +5,10 @@ export const midjourneyV8: ModelConfig = {
 	name: 'Midjourney v8',
 	type: 'image',
 	supportedProviders: {
+		// storyverse: midjourney-v8 is in the router registry but the legnext adapter
+		// throws unknown_model (501) — leave it out of the plugin's supportedProviders
+		// until server/src/adapters/legnext.ts implements the upstream call. See
+		// docs/v2-cloud-feature-gaps.md.
 		legnext: { apiModelId: 'midjourney' },
 	},
 	modes: ['text-to-image'],
@@ -54,6 +58,8 @@ export const midjourneyNiji7: ModelConfig = {
 	name: 'Midjourney niji 7',
 	type: 'image',
 	supportedProviders: {
+		// storyverse: midjourney-niji-7 is in the router registry but the legnext adapter
+		// throws unknown_model (501) — same story as midjourney-v8.
 		legnext: { apiModelId: 'midjourney' },
 	},
 	modes: ['text-to-image'],

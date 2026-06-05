@@ -21,6 +21,7 @@ export const gpt55Pro: ModelConfig = {
 		openai: { apiModelId: 'gpt-5.5-pro' },
 		tokenrouter: { apiModelId: 'openai/gpt-5.5-pro' },
 		apimart: { apiModelId: 'gpt-5.5-pro' },
+		storyverse: { apiModelId: 'gpt-5.5-pro' },
 	},
 	modes: ['text-to-text'],
 	params: [],
@@ -33,6 +34,7 @@ export const gemini31Pro: ModelConfig = {
 	supportedProviders: {
 		gemini: { apiModelId: 'gemini-3.1-pro-preview' },
 		tokenrouter: { apiModelId: 'google/gemini-3.1-pro-preview' },
+		storyverse: { apiModelId: 'gemini-3.1-pro' },
 	},
 	modes: ['text-to-text'],
 	params: [],
@@ -57,6 +59,7 @@ export const gemini3Flash: ModelConfig = {
 	supportedProviders: {
 		gemini: { apiModelId: 'gemini-3-flash-preview' },
 		tokenrouter: { apiModelId: 'google/gemini-3-flash-preview' },
+		storyverse: { apiModelId: 'gemini-3-flash' },
 	},
 	modes: ['text-to-text'],
 	params: [],
@@ -82,6 +85,7 @@ export const qwen36Plus: ModelConfig = {
 	supportedProviders: {
 		tokenrouter: { apiModelId: 'qwen/qwen3.6-plus' },
 		dashscope: { apiModelId: 'qwen3.6-plus' },
+		storyverse: { apiModelId: 'qwen-3-6-plus' },
 	},
 	modes: ['text-to-text'],
 	params: [],

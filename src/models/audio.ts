@@ -115,6 +115,7 @@ export const elevenLabsTTS: ModelConfig = {
 	supportedProviders: {
 		elevenlabs: { apiModelId: 'eleven_v3' },
 		fal: { apiModelId: 'fal-ai/elevenlabs/tts/eleven-v3' },
+		storyverse: { apiModelId: 'elevenlabs-tts-v3' },
 	},
 	modes: ['tts'],
 	params: [
@@ -274,6 +275,7 @@ export const grokTTS: ModelConfig = {
 	type: 'audio',
 	supportedProviders: {
 		xai: { apiModelId: 'grok-tts' },
+		storyverse: { apiModelId: 'grok-tts' },
 	},
 	modes: ['tts'],
 	params: [
@@ -319,6 +321,7 @@ export const elevenLabsMusic: ModelConfig = {
 	supportedProviders: {
 		elevenlabs: { apiModelId: 'music_v1' },
 		fal: { apiModelId: 'fal-ai/elevenlabs/music' },
+		storyverse: { apiModelId: 'elevenlabs-music' },
 	},
 	modes: ['music'],
 	params: [
@@ -377,6 +380,7 @@ export const elevenLabsSFX: ModelConfig = {
 	supportedProviders: {
 		elevenlabs: { apiModelId: 'eleven_text_to_sound_v2' },
 		fal: { apiModelId: 'fal-ai/elevenlabs/sound-effects/v2' },
+		storyverse: { apiModelId: 'elevenlabs-sfx' },
 	},
 	modes: ['sound-effect'],
 	params: [
